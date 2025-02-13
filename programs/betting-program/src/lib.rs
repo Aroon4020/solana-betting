@@ -155,52 +155,62 @@ pub mod event_betting {
 
 
     pub fn resolve_event(ctx: Context<ResolveEvent>, winning_outcome: String) -> Result<()> {
+        // Get mutable references to accounts from the context for easier access and modification.
         let event = &mut ctx.accounts.event;
         let event_pool = &ctx.accounts.event_pool;
         let fee_pool = &ctx.accounts.fee_pool;
         let program_state = &mut ctx.accounts.program_state;
     
         msg!("Resolve Event Instruction Called");
-        msg!("  Owner Signer (ctx.accounts.owner.key()): {:?}", ctx.accounts.owner.key());
-        msg!("  Program State Owner (program_state.owner): {:?}", program_state.owner);
+        msg!("  Owner Signer (ctx.accounts.owner.key()): {:?}", ctx.accounts.owner.key());
+        msg!("  Program State Owner (program_state.owner): {:?}", program_state.owner);
     
-    
+        // Security check: Ensure only the program owner can resolve events.
         require!(
             program_state.owner == ctx.accounts.owner.key(),
             ErrorCode::Unauthorized
         );
     
+        // Get the current clock time from the Solana runtime.
         let clock = Clock::get()?;
+        // Security check: Ensure the event deadline has passed before resolving.
         require!(
             clock.unix_timestamp >= event.deadline,
             ErrorCode::EventStillActive
         );
+        // Security check: Ensure the event is not already resolved to prevent double resolution.
         require!(!event.resolved, ErrorCode::EventAlreadyResolved);
     
+        // Find the index of the winning outcome from the event's possible outcomes.
+        // This validates that the provided winning outcome is indeed one of the event's options.
         let winning_outcome_index = event.possible_outcomes.iter()
             .position(|x| x == &winning_outcome)
             .ok_or(ErrorCode::InvalidWinningOutcome)?;
     
+        // Get the total amount of tokens in the event pool token account.
         let total_event_pool_amount = token::accessor::amount(&event_pool.to_account_info())?;
+        // Calculate the fee to be taken from the event pool based on the program's fee percentage.
         let fee = (total_event_pool_amount as u128)
             .checked_mul(program_state.fee_percentage as u128)
             .unwrap()
-            .checked_div(10000)
+            .checked_div(10000) // Assuming fee_percentage is out of 10000 (e.g., 1000 = 10%)
             .unwrap() as u64;
     
+        // Update the event state to mark it as resolved and record the winning outcome.
         event.resolved = true;
         event.winning_outcome = Some(winning_outcome.clone());
     
+        // Derive the Program Authority PDA. This PDA is controlled by the program and is used for signing certain operations.
         let (program_authority_pda, bump) = Pubkey::find_program_address(
             &[PROGRAM_AUTHORITY_SEED],
             ctx.program_id
         );
-        // In program's resolve_event function:
-        msg!("  Program Authority PDA (derived): {:?}", program_authority_pda);
-        msg!("  Program Authority Account (passed): {:?}", ctx.accounts.program_authority.key());
+        // Log the derived Program Authority PDA and the passed Program Authority Account Key for debugging and verification.
+        msg!("  Program Authority PDA (derived): {:?}", program_authority_pda);
+        msg!("  Program Authority Account (passed): {:?}", ctx.accounts.program_authority.key());
     
-    
-        // Corrected signer seeds for EVENT PDA
+        // Construct the signer seeds for the Event PDA.
+        // These seeds are used to sign the token transfer CPI call, allowing the Event PDA to act as the authority.
         let event_signer_seeds = &[
             &EVENT_SEED[..],
             &event.id.to_le_bytes()[..],
@@ -208,28 +218,38 @@ pub mod event_betting {
         ];
         let signer: &[&[&[u8]]] = &[event_signer_seeds];
     
+        // Log account keys involved in the token transfer for clarity.
+        msg!("  Event Pool Token Account (from): {:?}", ctx.accounts.event_pool.key());
+        msg!("  Fee Pool Token Account (to): {:?}", ctx.accounts.fee_pool.key());
+        // Corrected to use the `event` variable which is already mutably borrowed
+        msg!("  Event PDA (authority): {:?}", event.key()); // Log Event PDA as authority in transfer
     
-        msg!("  Event Pool Token Account (from): {:?}", ctx.accounts.event_pool.key());
-        msg!("  Fee Pool Token Account (to): {:?}", ctx.accounts.fee_pool.key());
-        msg!("  Event PDA (authority): {:?}", ctx.accounts.event.key()); // <---- Log Event PDA as authority
     
-    
+        // Perform a token transfer CPI call to move the calculated fee from the Event Pool to the Fee Pool.
         token::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.event_pool.to_account_info(),
-                    to: ctx.accounts.fee_pool.to_account_info(),
-                    authority: ctx.accounts.event.to_account_info(), // <---- Use event PDA as authority
+                    from: ctx.accounts.event_pool.to_account_info(), // Source account for tokens: Event Pool
+                    to: ctx.accounts.fee_pool.to_account_info(),     // Destination account for tokens: Fee Pool
+                    // Corrected to use the `event` variable which is already mutably borrowed
+                    authority: event.to_account_info(), // Authority for transfer: Event PDA
                 },
-                signer, // <---- Use event PDA signer seeds
+                signer, // Signer for the CPI: Event PDA Signer Seeds
             ),
-            fee,
+            fee, // Amount of tokens to transfer: calculated fee
         )?;
     
+        // Update the program state by adding the collected fee to the accumulated fees.
         program_state.accumulated_fees = program_state.accumulated_fees
             .checked_add(fee)
             .unwrap();
+    
+        // **Correct the event.total_pool value by subtracting the fee**
+        event.total_pool = event.total_pool
+            .checked_sub(fee)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+    
     
         Ok(())
     }
@@ -256,14 +276,14 @@ pub mod event_betting {
             .checked_mul(user_bet.amount)
             .and_then(|v| v.checked_div(total_winning_bets))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-
+        msg!("Payout: {:?}", payout);
         let signer_seeds = &[
             EVENT_SEED,
             &ctx.accounts.event.id.to_le_bytes(),
             &[ctx.bumps.event], // Corrected: Use event bump
         ];
         let signer: &[&[&[u8]]] = &[signer_seeds];
-
+    
         token::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
