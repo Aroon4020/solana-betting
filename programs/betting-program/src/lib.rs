@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::secp256k1_recover::secp256k1_recover;
+use anchor_lang::solana_program::{
+    secp256k1_recover::secp256k1_recover,
+    system_program,
+};
 use anchor_spl::token::{self, Token, TokenAccount, Transfer, Mint};
 use sha3::{Digest, Keccak256};
 
@@ -12,6 +15,8 @@ pub const USER_BET_SEED: &[u8] = b"user_bet";
 pub const USER_SEED: &[u8] = b"user";
 pub const FEE_POOL_SEED: &[u8] = b"fee_pool";
 pub const PROGRAM_AUTHORITY_SEED: &[u8] = b"program_authority";
+pub const ETH_MESSAGE_PREFIX: &[u8] = b"\x19Ethereum Signed Message:\n32";
+
 
 #[program]
 pub mod event_betting {
@@ -139,7 +144,7 @@ pub mod event_betting {
             amount,
         )?;
 
-        if user_bet.outcome.is_empty() {   // Removed unnecessary parentheses
+        if user_bet.outcome.is_empty() { 
             user_bet.outcome = outcome.clone();
         } else {
             require!(user_bet.outcome == outcome, ErrorCode::InvalidOutcome);
@@ -151,6 +156,111 @@ pub mod event_betting {
         Ok(())
     }
 
+    pub fn place_bet_with_voucher(
+        ctx: Context<PlaceBetWithVoucher>,
+        event_id: u64,
+        outcome: String,
+        amount: u64,
+        vouched_amount: u64,
+        nonce: u64,
+        signature: Vec<u8>
+    ) -> Result<()> {
+        let event = &mut ctx.accounts.event;
+        let user_bet = &mut ctx.accounts.user_bet;
+        let user_account = &mut ctx.accounts.user_account;
+        let program_state = &mut ctx.accounts.program_state;
+        let clock = Clock::get()?;
+    
+        require!(vouched_amount > 0, ErrorCode::VouchedAmountZero);
+        require!(
+            vouched_amount <= event.voucher_amount.checked_sub(event.total_voucher_claimed).ok_or(ErrorCode::ArithmeticOverflow)?,
+            ErrorCode::VoucherAmountExceedsLimit
+        );
+        require!(nonce == user_account.nonce, ErrorCode::InvalidNonce);
+    
+        let program_address = crate::ID;
+    
+        let message = [&program_address.as_ref(), ctx.accounts.user.key().as_ref(), &vouched_amount.to_le_bytes(), &nonce.to_le_bytes()].concat();
+    
+        let mut keccak = Keccak256::new();
+        keccak.update(abi_encode_packed(&[&message]));
+        let message_hash_bytes = keccak.finalize();
+        let message_hash = &message_hash_bytes[..];
+    
+    
+        let prefixed_message = [&ETH_MESSAGE_PREFIX, message_hash].concat();
+    
+        let mut prefixed_keccak = Keccak256::new();
+        prefixed_keccak.update(prefixed_message);
+        let prefixed_message_hash_bytes = prefixed_keccak.finalize();
+        let prefixed_message_hash = &prefixed_message_hash_bytes[..];
+    
+    
+        let recovered_key_result = secp256k1_recover(
+            prefixed_message_hash, // corrected argument order
+            0,                   // corrected argument order
+            &signature,            // corrected argument order
+        );
+    
+        match recovered_key_result {
+            Ok(recovered_key) => {
+                let recovered_pubkey_bytes = recovered_key.to_bytes(); // corrected: use to_bytes() instead of serialize_compressed()
+                let recovered_pubkey_bytes_32: [u8; 32] = recovered_pubkey_bytes[..].try_into().unwrap(); //take [u8;32]
+                let recovered_pubkey = Pubkey::new_from_array(recovered_pubkey_bytes_32);
+    
+    
+                require!(recovered_pubkey.eq(&program_state.signer), ErrorCode::InvalidSignature); // Corrected: Compare Pubkey directly
+    
+                user_account.nonce = user_account.nonce.checked_add(1).unwrap();
+                event.total_voucher_claimed = event.total_voucher_claimed.checked_add(vouched_amount).unwrap();
+    
+                let outcome_index = event.possible_outcomes.iter()
+                    .position(|x| x == &outcome)
+                    .ok_or(ErrorCode::InvalidOutcome)?;
+    
+    
+                let bet_amount = amount.checked_add(vouched_amount).ok_or(ErrorCode::ArithmeticOverflow)?;
+    
+                if amount > 0 {
+                    token::transfer(
+                        CpiContext::new(
+                            ctx.accounts.token_program.to_account_info(),
+                            Transfer {
+                                from: ctx.accounts.user_token_account.to_account_info(),
+                                to: ctx.accounts.event_pool.to_account_info(),
+                                authority: ctx.accounts.user.to_account_info(),
+                            },
+                        ),
+                        amount,
+                    )?;
+                }
+    
+                program_state.accumulated_fees = program_state.accumulated_fees.checked_sub(vouched_amount).ok_or(ErrorCode::ArithmeticOverflow)?;
+    
+    
+                event.total_bets_by_outcome[outcome_index] = event.total_bets_by_outcome[outcome_index]
+                    .checked_add(bet_amount)
+                    .ok_or(ErrorCode::ArithmeticOverflow)?;
+                event.total_pool = event.total_pool.checked_add(bet_amount).unwrap();
+    
+    
+                if user_bet.outcome.is_empty() {
+                    user_bet.outcome = outcome.clone();
+                } else {
+                    require!(user_bet.outcome == outcome, ErrorCode::InvalidOutcome);
+                }
+    
+                user_bet.amount = user_bet.amount.checked_add(bet_amount).unwrap();
+    
+    
+                Ok(())
+            }
+            Err(_) => {
+                return Err(ErrorCode::InvalidSignature.into());
+            }
+        }
+    }
+
 
 
 
@@ -160,10 +270,7 @@ pub mod event_betting {
         let event_pool = &ctx.accounts.event_pool;
         let fee_pool = &ctx.accounts.fee_pool;
         let program_state = &mut ctx.accounts.program_state;
-    
-        msg!("Resolve Event Instruction Called");
-        msg!("  Owner Signer (ctx.accounts.owner.key()): {:?}", ctx.accounts.owner.key());
-        msg!("  Program State Owner (program_state.owner): {:?}", program_state.owner);
+
     
         // Security check: Ensure only the program owner can resolve events.
         require!(
@@ -205,10 +312,6 @@ pub mod event_betting {
             &[PROGRAM_AUTHORITY_SEED],
             ctx.program_id
         );
-        // Log the derived Program Authority PDA and the passed Program Authority Account Key for debugging and verification.
-        msg!("  Program Authority PDA (derived): {:?}", program_authority_pda);
-        msg!("  Program Authority Account (passed): {:?}", ctx.accounts.program_authority.key());
-    
         // Construct the signer seeds for the Event PDA.
         // These seeds are used to sign the token transfer CPI call, allowing the Event PDA to act as the authority.
         let event_signer_seeds = &[
@@ -217,13 +320,7 @@ pub mod event_betting {
             &[ctx.bumps.event], // Use event bump
         ];
         let signer: &[&[&[u8]]] = &[event_signer_seeds];
-    
-        // Log account keys involved in the token transfer for clarity.
-        msg!("  Event Pool Token Account (from): {:?}", ctx.accounts.event_pool.key());
-        msg!("  Fee Pool Token Account (to): {:?}", ctx.accounts.fee_pool.key());
-        // Corrected to use the `event` variable which is already mutably borrowed
-        msg!("  Event PDA (authority): {:?}", event.key()); // Log Event PDA as authority in transfer
-    
+ 
     
         // Perform a token transfer CPI call to move the calculated fee from the Event Pool to the Fee Pool.
         token::transfer(
@@ -249,8 +346,6 @@ pub mod event_betting {
         event.total_pool = event.total_pool
             .checked_sub(fee)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-    
-    
         Ok(())
     }
 
@@ -276,7 +371,6 @@ pub mod event_betting {
             .checked_mul(user_bet.amount)
             .and_then(|v| v.checked_div(total_winning_bets))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-        msg!("Payout: {:?}", payout);
         let signer_seeds = &[
             EVENT_SEED,
             &ctx.accounts.event.id.to_le_bytes(),
@@ -309,18 +403,30 @@ pub mod event_betting {
     ) -> Result<()> {
         let event = &mut ctx.accounts.event;
         let program_state = &mut ctx.accounts.program_state;
-
         require!(event.winning_outcome.is_none(), ErrorCode::VoucherUpdateNotAllowed);
         require!(new_voucher_amount >= event.total_voucher_claimed, ErrorCode::InsufficientVoucherAmount);
-
-        let delta = new_voucher_amount.checked_sub(event.voucher_amount).unwrap();
+        // Calculate voucher difference
+        let voucher_diff = if new_voucher_amount > event.voucher_amount {
+        new_voucher_amount.checked_sub(event.voucher_amount).unwrap()
+        } else {
+            event.voucher_amount.checked_sub(new_voucher_amount).unwrap()
+        };
+        // Handle voucher amount increase
+        if new_voucher_amount > event.voucher_amount {
+            if program_state.accumulated_fees < program_state.active_vouchers_amount.checked_add(voucher_diff).unwrap() {
+                return Err(ErrorCode::InsufficientProtocolFees.into());
+        }
         program_state.active_vouchers_amount = program_state.active_vouchers_amount
-            .checked_add(delta)
-            .unwrap();
-        event.voucher_amount = new_voucher_amount;
-
-        Ok(())
+        .checked_add(voucher_diff)
+        .unwrap();
+            } else { // Handle voucher amount decrease
+        program_state.active_vouchers_amount = program_state.active_vouchers_amount
+        .checked_sub(voucher_diff)
+        .unwrap();
     }
+        event.voucher_amount = new_voucher_amount;
+        Ok(())
+        }
 
     // Owner-only: Withdraw fees
     pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
@@ -351,8 +457,6 @@ pub mod event_betting {
     
             let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
             token::transfer(cpi_ctx, amount)?;
-    
-
         Ok(())
     }
 
@@ -467,6 +571,18 @@ pub mod event_betting {
         Ok(())
     }
 }
+    // ====================
+// Utils
+// ====================
+pub fn abi_encode_packed(tokens: &[&[u8]]) -> Vec<u8> {
+    tokens.iter().fold(Vec::new(), |mut acc, token| {
+        acc.extend_from_slice(token);
+        acc
+    })
+}
+
+
+
 
 // ====================
 // Data Structures
@@ -557,6 +673,8 @@ pub enum ErrorCode {
     EventCannotBeEnded,
     #[msg("Event has active bets")]
     EventHasBets,
+    #[msg("Vouched amount cannot be zero")]
+    VouchedAmountZero,
 }
 
 // ====================
@@ -678,6 +796,49 @@ pub struct PlaceBet<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
     pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct PlaceBetWithVoucher<'info> {
+    #[account(mut)]
+    pub program_state: Account<'info, ProgramState>,
+    #[account(mut)]
+    pub event: Account<'info, Event>,
+    #[account(
+        mut,
+        seeds = [USER_BET_SEED, user.key().as_ref(), &event.id.to_le_bytes()],
+        has_one = user,
+        bump
+    )]
+    pub user_bet: Account<'info, UserBet>,
+    #[account(mut)]
+    pub user_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [EVENT_SEED, &event.id.to_le_bytes(), b"pool"],
+        bump,
+        token::mint = user_token_account.mint,
+        token::authority = event
+    )]
+    pub event_pool: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub user_account: Account<'info, User>,
+    #[account(signer)]
+    pub user: Signer<'info>,
+    #[account(
+        seeds = [PROGRAM_AUTHORITY_SEED],
+        bump,
+    )]
+    pub program_authority: Account<'info, ProgramState>,
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
+        bump,
+        token::mint = fee_pool.mint,
+    )]
+    pub fee_pool: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 
