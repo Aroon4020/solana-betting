@@ -442,7 +442,11 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "rand_core 0.6.4",
  "sha3 0.10.8",
+ "solana-ed25519-instruction",
  "solana-program",
 ]
 
@@ -1830,6 +1834,16 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "solana-ed25519-instruction"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ddd203bb95feecdbcb3d1234778d755e645059a3d2d7f19b5bb036d054341ed"
+dependencies = [
+ "borsh 0.10.4",
+ "solana-program",
+]
 
 [[package]]
 name = "solana-frozen-abi"
