@@ -18,7 +18,7 @@
 //     signBytes,
 //     verifySignature,
 //     getUtf8Encoder,
-//     getBase58Decoder, PublicKey, SystemProgram, Transaction, Keypair, Connection, Provider
+//     getBase58Decoder, PublicKey, SystemProgram, Transaction, Keypair, Connection, Provider, SYSVAR_RENT_PUBKEY
 // } from "@solana/web3.js";
 // import { ethers } from "ethers";
 
@@ -228,7 +228,7 @@
 //                 programState: programStatePDA,
 //                 owner: owner.publicKey,
 //                 systemProgram: SystemProgram.programId,
-//                 rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+//                 rent: SYSVAR_RENT_PUBKEY,
 //             })
 //             .signers([owner])
 //             .rpc();
@@ -355,102 +355,6 @@
 //         );
 //         user2BetPDA = _user2BetPDA_updated;
 //         //console.log("EventPoolTokenAccount at the END of before hook:", eventPoolPDA[0].toBase58());
-//     });
-//     it.skip("Should place bet with voucher amount successfully", async () => {
-//         // 1. Add voucher funds to the program
-//         const additionalVoucherFunds = new anchor.BN(50000);
-//         await program.methods.addVoucherFunds(additionalVoucherFunds)
-//             .accounts({
-//                 programState: programStatePDA,
-//                 feePool: feePoolPDA[0], // CORRECTED: Use PDA directly
-//                 userTokenAccount: ownerTokenAccount,
-//                 fundSource: owner.publicKey,
-//                 tokenProgram: TOKEN_PROGRAM_ID,
-//             })
-//             .signers([owner])
-//             .rpc();
-    
-//         // 2. Create new event with voucher amount
-//         const programStateBefore = await program.account.programState.fetch(programStatePDA);
-//         const newEventId = programStateBefore.nextEventId;
-        
-//         // CORRECTED: Derive event PDA with explicit BN conversion
-//         const [newEventPDA] = await PublicKey.findProgramAddress(
-//             [
-//                 Buffer.from("event"),
-//                 new anchor.BN(newEventId).toArrayLike(Buffer, "le", 8)
-//             ],
-//             program.programId
-//         );
-    
-//         // 3. Initialize event pool PDA
-//         const [newEventPoolPDA] = await PublicKey.findProgramAddress(
-//             [
-//                 Buffer.from("event"),
-//                 new anchor.BN(newEventId).toArrayLike(Buffer, "le", 8),
-//                 Buffer.from("pool")
-//             ],
-//             program.programId
-//         );
-    
-//         // 4. Initialize user bet account
-//         const [newUserBetPDA] = await PublicKey.findProgramAddress(
-//             [
-//                 Buffer.from("user_bet"),
-//                 user.publicKey.toBytes(),
-//                 new anchor.BN(newEventId).toArrayLike(Buffer, "le", 8)
-//             ],
-//             program.programId
-//         );
-//         console.log("New User Bet PDA:", newUserBetPDA.toBase58());
-//         let now = Math.floor(Date.now() / 1000);
-//         await program.methods.createEvent(eventDescription, new anchor.BN(now + 1), new anchor.BN(now + 4), possibleOutcomes, new anchor.BN(20000))
-//             .accounts({
-//                 programState: programStatePDA,
-//                 event: newEventPDA,
-//                 owner: owner.publicKey,
-//                 systemProgram: SystemProgram.programId,
-//             })
-//             .signers([owner])
-//             .rpc();
-//             console.log("Event created successfully!");
-//         // 5. Prepare signature with PROGRAM AUTHORITY as signer (CRITICAL FIX)
-//         //const programState = await program.account.programState.fetch(programStatePDA);
-//         const programSignerKeypair = programAuthority; // Use pre-generated program authority keypair
-        
-//         const message = Buffer.concat([
-//             program.programId.toBuffer(),
-//             user.publicKey.toBuffer(),
-//             new anchor.BN(10000).toArrayLike(Buffer, 'le', 8), // vouchedAmount
-//             new anchor.BN(0).toArrayLike(Buffer, 'le', 8) // nonce
-//         ]);
-//         console.log("Message to sign:", message);
-//         // CORRECTED: Sign with program authority's keypair
-//         const signature = nacl.sign.detached(message, programSignerKeypair.secretKey);
-//         const signatureArray = Array.from(signature);
-    
-//         // 6. Place bet with voucher
-//         await program.methods.placeBetWithVoucher(
-//             newEventId,
-//             possibleOutcomes[0],
-//             new anchor.BN(5000), // userAmount
-//             new anchor.BN(10000), // vouchedAmount
-//             new anchor.BN(0), // nonce
-//             signatureArray
-//         ).accounts({
-//             programState: programStatePDA,
-//             event: newEventPDA,
-//             userBet: newUserBetPDA,
-//             userTokenAccount: userTokenAccount,
-//             eventPool: newEventPoolPDA,
-//             user: user.publicKey,
-//             programAuthority: programAuthorityPDAAccount,
-//             feePool: feePoolPDA[0], // CORRECTED: Direct PDA usage
-//             tokenProgram: TOKEN_PROGRAM_ID,
-//             systemProgram: SystemProgram.programId,
-//         }).signers([user]).rpc({ skipPreflight: true });
-    
-//         // 7. Verification logic...
 //     });
 
 //     it("Should resolve the event and transfer fees", async () => {
@@ -763,116 +667,6 @@
 
 //         const updatedProgramState = await program.account.programState.fetch(programStatePDA);
 //         assert.ok(updatedProgramState.owner.equals(newOwner));
-//     });
-
-//     it("Should place bet with voucher successfully", async () => {
-//         // 1. Prepare voucher parameters
-//         const vouchedAmountForBet = new anchor.BN(5000);
-//         const currentNonce = (await program.account.userBet.fetch(userBetPDA)).nonce;
-//         const message = Buffer.concat([
-//             program.programId.toBytes(),
-//             user.publicKey.toBytes(),
-//             vouchedAmountForBet.toBuffer('le', 8),
-//             currentNonce.toBuffer('le', 8),
-//         ]);
-
-//         const messageHex = message.toString('hex');
-
-//         // Debugging logs
-//         console.log("Provider Wallet:", provider.wallet);
-//         console.log("Provider Wallet Signer (before override):", provider.wallet.signer);
-
-//         // Attempt to explicitly set the signer
-//         provider.wallet.signer = owner;
-//         console.log("Provider Wallet Signer (after override):", provider.wallet.signer);
-
-//         // Check if signMessage exists - ADDED - crucial check
-//         if (typeof provider.wallet.signMessage !== 'function') {
-//             console.error("provider.wallet.signMessage is NOT a function!"); // ADDED - Error log
-//             throw new Error("provider.wallet.signMessage is not a function"); // Explicitly throw error for clarity
-//         }
-
-
-//         // Corrected line: Use provider.wallet.signMessage
-//         const signature = await provider.wallet.signMessage(message);
-//         const signatureBytes = signature.signature;
-
-
-//         // 2. Fetch initial balances and account states
-//         const initialUserTokenAccountBalance = await getTokenAccount(connection, userTokenAccount);
-//         const initialEventPoolTokenAccountBalance = await getTokenAccount(connection, eventPoolTokenAccount);
-//         const initialUserBetAccount = await program.account.userBet.fetch(userBetPDA);
-//         const initialEventAccount = await program.account.event.fetch(eventPDA);
-//         const initialProgramStateAccount = await program.account.programState.fetch(programStatePDA);
-
-//         console.log("Initial User Token Account Balance:", initialUserTokenAccountBalance.amount.toString());
-//         console.log("Initial Event Pool Token Account Balance:", initialEventPoolTokenAccountBalance.amount.toString());
-//         console.log("Initial User Bet Amount:", initialUserBetAccount.amount.toString());
-//         console.log("Initial Event Voucher Claimed:", initialEventAccount.totalVoucherClaimed.toString());
-//         console.log("Initial Program State Accumulated Fees:", initialProgramStateAccount.accumulatedFees.toString());
-
-
-//         // 3. Place bet with voucher
-//         console.log("Placing bet with voucher...");
-//         await program.methods.placeBetWithVoucher(
-//             new anchor.BN(event_account.id),
-//             possibleOutcomes[0],
-//             betAmount, // Actual token amount bet, set to 0 if only voucher
-//             vouchedAmountForBet,
-//             currentNonce,
-//             Array.from(signatureBytes) // Pass the signature as Vec<u8>
-//         )
-//             .accounts({
-//                 programState: programStatePDA,
-//                 event: eventPDA,
-//                 userBet: userBetPDA,
-//                 userTokenAccount: userTokenAccount,
-//                 eventPool: eventPoolTokenAccount,
-//                 user: user.publicKey,
-//                 programAuthority: programAuthorityPDAAccount,
-//                 feePool: feePoolPDA[0],
-//                 tokenProgram: TOKEN_PROGRAM_ID,
-//                 systemProgram: SystemProgram.programId,
-//             })
-//             .signers([user])
-//             .rpc();
-//         console.log("Bet placed with voucher successfully.");
-
-//         // 4. Fetch updated balances and account states
-//         const updatedUserTokenAccountBalance = await getTokenAccount(connection, userTokenAccount);
-//         const updatedEventPoolTokenAccountBalance = await getTokenAccount(connection, eventPoolTokenAccount);
-//         const updatedUserBetAccount = await program.account.userBet.fetch(userBetPDA);
-//         const updatedEventAccount = await program.account.event.fetch(eventPDA);
-//         const updatedProgramStateAccount = await program.account.programState.fetch(programStatePDA);
-
-
-//         console.log("Updated User Token Account Balance:", updatedUserTokenAccountBalance.amount.toString());
-//         console.log("Updated Event Pool Token Account Balance:", updatedEventPoolTokenAccountBalance.amount.toString());
-//         console.log("Updated User Bet Amount:", updatedUserBetAccount.amount.toString());
-//         console.log("Updated Event Voucher Claimed:", updatedEventAccount.totalVoucherClaimed.toString());
-//         console.log("Updated Program State Accumulated Fees:", updatedProgramStateAccount.accumulatedFees.toString());
-
-
-//         // 5. Assertions to verify bet placement and voucher usage
-//         // Assert UserBet amount increased by (betAmount + vouchedAmountForBet)
-//         assert.ok(updatedUserBetAccount.amount.eq(initialUserBetAccount.amount.add(betAmount.add(vouchedAmountForBet))), "UserBet amount should increase by bet + voucher amount");
-//         // Assert Event's total voucher claimed increased by vouchedAmountForBet
-//         assert.ok(updatedEventAccount.totalVoucherClaimed.eq(initialEventAccount.totalVoucherClaimed.add(vouchedAmountForBet)), "Event's total voucher claimed should increase");
-//         // Assert ProgramState's accumulated fees decreased by vouchedAmountForBet
-//         assert.ok(updatedProgramStateAccount.accumulatedFees.eq(initialProgramStateAccount.accumulatedFees.sub(vouchedAmountForBet)), "ProgramState's accumulated fees should decrease");
-//         // Assert User nonce is incremented
-//         assert.ok(updatedUserBetAccount.nonce.eq(initialUserBetAccount.nonce.add(new anchor.BN(1))), "UserBet nonce should increment");
-
-
-//         // If betAmount > 0, assert token transfer, otherwise, only voucher effects are asserted
-//         if (betAmount.gtn(new anchor.BN(0))) {
-//             assert.ok(updatedUserTokenAccountBalance.amount.eq(initialUserTokenAccountBalance.amount.sub(betAmount)), "User token account balance should decrease by bet amount");
-//             assert.ok(updatedEventPoolTokenAccountBalance.amount.eq(initialEventPoolTokenAccountBalance.amount.add(betAmount)), "Event pool token account balance should increase by bet amount");
-//         } else {
-//             // If only voucher was used, token balances should remain unchanged
-//             assert.ok(updatedUserTokenAccountBalance.amount.eq(initialUserTokenAccountBalance.amount), "User token account balance should not change when only voucher is used");
-//             assert.ok(updatedEventPoolTokenAccountBalance.amount.eq(initialEventPoolTokenAccountBalance.amount), "Event pool token account balance should not change when only voucher is used");
-//         }
 //     });
 
 // });
