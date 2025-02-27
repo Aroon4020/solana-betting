@@ -514,6 +514,20 @@ pub mod event_betting {
 
     // Add voucher funds
     pub fn add_voucher_funds(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
+        require!(amount > 0, EventBettingProtocolError::BetAmountZero);
+
+        // Update program state first
+        ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
+            .checked_add(amount)
+            .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+
+        // Log the initial balances
+        let user_token_account_balance = token::accessor::amount(&ctx.accounts.user_token_account.to_account_info())?;
+        let fee_pool_balance = token::accessor::amount(&ctx.accounts.fee_pool.to_account_info())?;
+        msg!("Initial user token account balance: {}", user_token_account_balance);
+        msg!("Initial fee pool balance: {}", fee_pool_balance);
+
+        // Transfer tokens from user to fee pool
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -521,15 +535,18 @@ pub mod event_betting {
                     from: ctx.accounts.user_token_account.to_account_info(),
                     to: ctx.accounts.fee_pool.to_account_info(),
                     authority: ctx.accounts.fund_source.to_account_info(),
-                },
+                }
             ),
             amount,
         )?;
-    
-        ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
-            .checked_add(amount)
-            .unwrap();
-    
+
+        // Log the final balances
+        let user_token_account_balance_after = token::accessor::amount(&ctx.accounts.user_token_account.to_account_info())?;
+        let fee_pool_balance_after = token::accessor::amount(&ctx.accounts.fee_pool.to_account_info())?;
+        msg!("Final user token account balance: {}", user_token_account_balance_after);
+        msg!("Final fee pool balance: {}", fee_pool_balance_after);
+
+        msg!("Successfully transferred {} tokens to fee pool", amount);
         Ok(())
     }
 
@@ -665,15 +682,16 @@ pub enum EventBettingProtocolError {
 // Contexts
 // ====================
 #[derive(Accounts)]
+#[instruction(fee_percentage: u64, signer: Pubkey)]
 pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + std::mem::size_of::<ProgramState>(), // Correct space calculation
+        space = 8 + std::mem::size_of::<ProgramState>(),
         seeds = [PROGRAM_AUTHORITY_SEED],
-        bump,
+        bump
     )]
-    pub program_authority: Account<'info, ProgramState>, // The PDA
+    pub program_authority: Account<'info, ProgramState>,
 
     #[account(
         init,
@@ -687,7 +705,7 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>, // Add rent sysvar for proper initialization
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
@@ -695,31 +713,30 @@ pub struct InitializeFeePool<'info> {
     #[account(
         init,
         payer = authority,
-        seeds = [BETTING_STATE_SEED, FEE_POOL_SEED], // "program_state", "fee_pool"
+        seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
         bump,
         token::mint = token_mint,
         token::authority = program_authority,
-        token::token_program = token_program,
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut, seeds = [BETTING_STATE_SEED], bump)]
+    #[account(mut)]
     pub program_state: Account<'info, ProgramState>,
 
     #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED], // "program_authority"
-        bump,
+        seeds = [PROGRAM_AUTHORITY_SEED],
+        bump
     )]
-    /// CHECK: PDA validated by seeds
-    pub program_authority: UncheckedAccount<'info>, // Changed from ProgramState
+    pub program_authority: Account<'info, ProgramState>,
 
     pub token_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
@@ -943,24 +960,41 @@ pub struct UpdateFeePercentage<'info> {
 
 #[derive(Accounts)]
 pub struct AddVoucherFunds<'info> {
-    #[account(mut, seeds = [BETTING_STATE_SEED], bump)]
-    pub program_state: Account<'info, ProgramState>,
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED],
+        bump,
+    )]
+    pub program_state: Box<Account<'info, ProgramState>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = user_token_account.owner == fund_source.key()
+    )]
     pub user_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
         seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
         bump,
+        token::mint = token_mint,
+        token::authority = program_authority,
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
-    #[account(signer)]
+    #[account(mut, signer)]
     pub fund_source: Signer<'info>,
 
+    pub token_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
+
+    #[account(
+        seeds = [PROGRAM_AUTHORITY_SEED],
+        bump
+    )]
+    pub program_authority: Account<'info, ProgramState>,
 }
+
 #[derive(Accounts)]
 pub struct InitializeUserBet<'info> {
     #[account(

@@ -1,8 +1,10 @@
 [workspace]
-members = [
-    "programs/betting-program"
-]
+members = ["programs/*"]
 resolver = "2"
+
+[workspace.dependencies]
+anchor-lang = { version = "0.28.0", features = ["init-if-needed"] }
+anchor-spl = "0.28.0"
 
 [profile.release]
 overflow-checks = true

@@ -29,56 +29,12 @@
 //   anchor.setProvider(provider);
 //   const program = anchor.workspace.EventBetting as Program<EventBetting>;
 
-//   // Create a map to store program state owners
-//   let currentOwner: Keypair;
+//   // Global variables for all tests
 //   let programStatePda: PublicKey;
 //   let feePoolPda: PublicKey;
 //   let mint: PublicKey;
 //   let sharedUserTokenAccount: PublicKey;
 
-//   // Add helper function to get or create program state owner
-//   async function getCurrentOwner(): Promise<Keypair> {
-//     try {
-//       const state = await program.account.programState.fetch(programStatePda);
-//       // Create a new keypair for the current owner
-//       const ownerKeypair = Keypair.generate();
-      
-//       // Fund the new keypair
-//       const airdropSig = await provider.connection.requestAirdrop(
-//         ownerKeypair.publicKey,
-//         1000000000
-//       );
-//       await provider.connection.confirmTransaction(airdropSig);
-
-//       // Transfer ownership to the new keypair
-//       await program.methods.updateOwner(ownerKeypair.publicKey)
-//         .accounts({
-//           programState: programStatePda,
-//           owner: state.owner,
-//         })
-//         .signers([provider.wallet.payer])
-//         .rpc();
-
-//       return ownerKeypair;
-//     } catch {
-//       // If program state doesn't exist, initialize it with provider wallet
-//       await program.methods.initialize(
-//         new anchor.BN(100),
-//         provider.wallet.publicKey
-//       ).accounts({
-//         programState: programStatePda,
-//         owner: provider.wallet.publicKey,
-//         systemProgram: SystemProgram.programId,
-//         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//       })
-//       .signers([provider.wallet.payer])
-//       .rpc();
-
-//       return provider.wallet.payer as Keypair;
-//     }
-//   }
-
-//   // Global variables for all tests
 //   // Run once before all tests
 //   before(async () => {
 //     console.log("=== Test Suite Setup ===");
@@ -90,35 +46,6 @@
 //     );
 //     console.log("Program State PDA:", programStatePda.toBase58());
 //     console.log("Initializing with wallet:", provider.wallet.publicKey.toBase58());
-
-//     // Initialize program state and get current owner
-//     currentOwner = await getCurrentOwner();
-
-//     // Initialize program state if it doesn't exist
-//     try {
-//       const state = await program.account.programState.fetch(programStatePda);
-//       console.log("Found existing program state");
-      
-//       // Update owner to current wallet if needed
-//       if (state.owner.toBase58() !== provider.wallet.publicKey.toBase58()) {
-//         console.log("Updating program state owner from", state.owner.toBase58(), "to", provider.wallet.publicKey.toBase58());
-//         await program.methods.updateOwner(provider.wallet.publicKey)
-//           .accounts({
-//             programState: programStatePda,
-//             owner: state.owner,
-//           })
-//           .remainingAccounts([{
-//             pubkey: state.owner,
-//             isWritable: true,
-//             isSigner: true
-//           }])
-//           .signers([currentOwner])
-//           .rpc();
-//       }
-//     } catch (error) {
-//       console.log("Initializing new program state");
-//       await initializeProgramState();
-//     }
 
 //     // Create mint
 //     try {
@@ -1460,98 +1387,6 @@
 //     });
 // });
 
-// describe("withdraw_fees", () => {
-//   const withdrawalAmount = new anchor.BN(500);
-//   let initialFees: anchor.BN;
-//   let ownerTokenAccount: PublicKey;
-
-//   before(async () => {
-//     // Fund fee pool by adding voucher funds
-//     await program.methods.addVoucherFunds(new anchor.BN(1000))
-//       .accounts({
-//         programState: programStatePda,
-//         userTokenAccount: sharedUserTokenAccount,
-//         feePool: feePoolPda,
-//         fundSource: provider.wallet.publicKey,
-//         tokenProgram: TOKEN_PROGRAM_ID,
-//         systemProgram: SystemProgram.programId,
-//       })
-//       .rpc();
-//     const state = await program.account.programState.fetch(programStatePda);
-//     initialFees = new anchor.BN(state.accumulatedFees);
-//     // Create owner token account (if not exists)
-//     ownerTokenAccount = await getAssociatedTokenAddress(mint, provider.wallet.publicKey);
-//   });
-
-//   it("successfully withdraws fees", async () => {
-//     console.log("!!!!!!!!!!!!!!!!!!!");
-//     await program.methods.withdrawFees(withdrawalAmount)
-//       .accounts({
-//         programState: programStatePda,
-//         feePool: feePoolPda,
-//         feePoolTokenAccount: feePoolPda, // already provided
-//         ownerTokenAccount: ownerTokenAccount, // Updated key to camelCase
-//         owner: provider.wallet.publicKey,
-//         program_authority: programStatePda,
-//         tokenProgram: TOKEN_PROGRAM_ID,
-//         systemProgram: SystemProgram.programId,
-//         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-//       })
-//       .rpc();
-//     // ...existing assertions...
-//   });
-
-//   it("fails when withdrawing zero fees", async () => {
-//     try {
-//       await program.methods.withdrawFees(new anchor.BN(0))
-//         .accounts({
-//           programState: programStatePda,
-//           feePool: feePoolPda,
-//           feePoolTokenAccount: feePoolPda,
-//           ownerTokenAccount: ownerTokenAccount, // Updated account key
-//           owner: provider.wallet.publicKey,
-//           program_authority: programStatePda,
-//           tokenProgram: TOKEN_PROGRAM_ID,
-//           systemProgram: SystemProgram.programId,
-//           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-//         })
-//         .rpc();
-//       assert.fail("Expected withdrawFees to throw an error when withdrawing zero fees");
-//     } catch (error: any) {
-//       console.log("withdraw zero fees error:", error.toString());
-//       // Verify that the error message includes "WithdrawAmountZero"
-//       assert.include(error.toString(), "WithdrawAmountZero");
-//     }
-//   });
-
-//   it("fails when a non-owner tries to withdraw fees", async () => {
-//     const nonOwner = Keypair.generate();
-//     const airdropSig = await provider.connection.requestAirdrop(nonOwner.publicKey, 1000000000);
-//     await provider.connection.confirmTransaction(airdropSig);
-//     try {
-//       await program.methods.withdrawFees(withdrawalAmount)
-//         .accounts({
-//           programState: programStatePda,
-//           feePool: feePoolPda,
-//           feePoolTokenAccount: feePoolPda,
-//           ownerTokenAccount: ownerTokenAccount, // Updated account key
-//           owner: nonOwner.publicKey, // non-owner
-//           program_authority: programStatePda,
-//           tokenProgram: TOKEN_PROGRAM_ID,
-//           systemProgram: SystemProgram.programId,
-//           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-//         })
-//         .signers([nonOwner])
-//         .rpc();
-//       assert.fail("Non-owner withdrawal should have failed");
-//     } catch (err) {
-//       assert.include(err.toString(), "Unauthorized");
-//     }
-//   });
-// });
 // });
 
 
