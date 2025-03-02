@@ -290,7 +290,6 @@
 //         const outcomeStr = possibleOutcomes[outcomeIndex];
 
 //         const placeBetTx = await program.methods.placeBetWithVoucher(
-//             eventIdForBet,
 //             outcomeStr,
 //             betAmount,
 //             vouchAmountForBet,
@@ -376,7 +375,6 @@
 
 //         // Place bet with voucher from new user on "Outcome 2"
 //         const tx = await program.methods.placeBetWithVoucher(
-//             (await program.account.programState.fetch(programStatePDA)).nextEventId.sub(new anchor.BN(1)),
 //             outcomeStr,
 //             additionalBetAmount,
 //             newVouchAmount,
