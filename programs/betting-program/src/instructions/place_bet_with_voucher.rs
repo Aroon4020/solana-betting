@@ -6,7 +6,11 @@ use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct PlaceBetWithVoucher<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED],
+        bump
+    )]
     pub program_state: Account<'info, ProgramState>,
 
     // Retain admin_signer only for the voucher check.
@@ -27,13 +31,6 @@ pub struct PlaceBetWithVoucher<'info> {
 
     #[account(mut, seeds = [BETTING_STATE_SEED, FEE_POOL_SEED], bump)]
     pub fee_pool: Account<'info, TokenAccount>,
-    #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED],
-        bump // Assuming PROGRAM_AUTHORITY_SEED is defined
-    )]
-    /// CHECK: Program authority is derived via seeds and validated in the program.
-    /// No need to deserialize and check account data, only account info is needed for CPI.
-    pub program_authority: AccountInfo<'info>,
 
     #[account(signer)]
     pub user: Signer<'info>,
@@ -85,7 +82,8 @@ pub fn place_bet_with_voucher_handler(
             amount,
         )?;
     }
-    let seeds = &[PROGRAM_AUTHORITY_SEED, &[ctx.bumps.program_authority]];
+    // Update signing to use program_state
+    let seeds = &[BETTING_STATE_SEED, &[ctx.bumps.program_state]];
     let signer = &[&seeds[..]];
     token::transfer(
         CpiContext::new_with_signer(
@@ -93,7 +91,7 @@ pub fn place_bet_with_voucher_handler(
             Transfer {
                 from: ctx.accounts.fee_pool.to_account_info(),
                 to: ctx.accounts.event_pool.to_account_info(),
-                authority: ctx.accounts.program_authority.to_account_info(),
+                authority: ctx.accounts.program_state.to_account_info(), // Use program_state instead
             },
             signer,
         ),

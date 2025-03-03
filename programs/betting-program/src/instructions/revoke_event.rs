@@ -1,8 +1,6 @@
 use anchor_lang::prelude::*;
 use solana_program::sysvar::clock::Clock;
-use crate::state::*;
-use crate::constants::*;
-use crate::error::EventBettingProtocolError;
+use crate::{state::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct RevokeEvent<'info> {

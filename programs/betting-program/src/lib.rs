@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token;
 use solana_program::account_info::AccountInfo;
 
 mod error;

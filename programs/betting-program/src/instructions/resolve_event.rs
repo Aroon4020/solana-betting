@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, accessor, Token, TokenAccount, Mint, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
 use solana_program::account_info::AccountInfo;
 use solana_program::sysvar::clock::Clock;
 use crate::state::*;
@@ -8,18 +8,15 @@ use crate::error::EventBettingProtocolError;
 
 #[derive(Accounts)]
 pub struct ResolveEvent<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED],
+        bump
+    )]
     pub program_state: Account<'info, ProgramState>,
 
     #[account(mut, seeds = [EVENT_SEED, &event.id.to_le_bytes()], bump)]
     pub event: Account<'info, Event>,
-
-    #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED],
-        bump
-    )]
-    /// CHECK: This PDA is derived from PROGRAM_AUTHORITY_SEED and is used solely for signing CPI calls.
-    pub program_authority: AccountInfo<'info>,
 
     #[account(
         mut,

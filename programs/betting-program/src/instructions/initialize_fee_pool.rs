@@ -13,21 +13,19 @@ pub struct InitializeFeePool<'info> {
         seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
         bump,
         token::mint = token_mint,
-        token::authority = program_authority
+        token::authority = program_state
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
-    pub program_state: Account<'info, ProgramState>,
-
     #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED],
+        mut,
+        seeds = [BETTING_STATE_SEED],
         bump
     )]
-    pub program_authority: Account<'info, ProgramState>,
+    pub program_state: Account<'info, ProgramState>,
 
     pub token_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,

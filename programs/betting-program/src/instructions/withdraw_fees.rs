@@ -1,13 +1,15 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer}; // Import token module
-use solana_program::sysvar::clock::Clock;
-use crate::state::*;
-use crate::constants::*;
-use crate::error::EventBettingProtocolError;
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use crate::{state::*, constants::*, error::*};
 
 #[derive(Accounts)]
 pub struct WithdrawFees<'info> {
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
 
     #[account(
@@ -17,17 +19,12 @@ pub struct WithdrawFees<'info> {
         token::mint = owner_token_account.mint,
     )]
     pub fee_pool: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub owner_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub owner: Signer<'info>,
-
-    #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED],
-        bump
-    )]
-    pub program_authority: Account<'info, ProgramState>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -48,10 +45,8 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
         .checked_sub(amount)
         .ok_or(EventBettingProtocolError::InsufficientFees)?;
 
-    // Bind the bump value to extend its lifetime.
-    let bump = ctx.bumps.program_authority;
-    let binding = [bump];
-    let signer_seeds = &[&[PROGRAM_AUTHORITY_SEED, &binding][..]];
+    let seeds = &[BETTING_STATE_SEED, &[ctx.bumps.program_state]];
+    let signer = &[&seeds[..]];
 
     token::transfer(
         CpiContext::new_with_signer(
@@ -59,9 +54,9 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
             Transfer {
                 from: ctx.accounts.fee_pool.to_account_info(),
                 to: ctx.accounts.owner_token_account.to_account_info(),
-                authority: ctx.accounts.program_authority.to_account_info(),
+                authority: ctx.accounts.program_state.to_account_info(),
             },
-            &[&[PROGRAM_AUTHORITY_SEED, &[ctx.bumps.program_authority]]],
+            signer,
         ),
         amount,
     )?;

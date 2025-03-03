@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer, Mint}; // Added import for token
+use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
@@ -7,14 +7,11 @@ pub struct AddVoucherFunds<'info> {
     #[account(
         mut,
         seeds = [BETTING_STATE_SEED],
-        bump,
+        bump
     )]
-    pub program_state: Account<'info, ProgramState>, // Removed Box, not needed for Account<'info, T>
+    pub program_state: Account<'info, ProgramState>,
 
-    #[account(
-        mut,
-        constraint = user_token_account.owner == fund_source.key()
-    )]
+    #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
 
     #[account(
@@ -22,7 +19,7 @@ pub struct AddVoucherFunds<'info> {
         seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
         bump,
         token::mint = token_mint,
-        token::authority = program_authority,
+        token::authority = program_state,
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
@@ -31,12 +28,6 @@ pub struct AddVoucherFunds<'info> {
 
     pub token_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
-
-    #[account(
-        seeds = [PROGRAM_AUTHORITY_SEED],
-        bump
-    )]
-    pub program_authority: Account<'info, ProgramState>,
 }
 
 pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {

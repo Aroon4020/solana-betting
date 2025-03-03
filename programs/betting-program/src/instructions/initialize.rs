@@ -8,15 +8,6 @@ pub struct Initialize<'info> {
         init,
         payer = owner,
         space = 8 + ProgramState::LEN,
-        seeds = [PROGRAM_AUTHORITY_SEED],
-        bump
-    )]
-    pub program_authority: Account<'info, ProgramState>,
-
-    #[account(
-        init,
-        payer = owner,
-        space = 8 + ProgramState::LEN,
         seeds = [BETTING_STATE_SEED],
         bump
     )]
