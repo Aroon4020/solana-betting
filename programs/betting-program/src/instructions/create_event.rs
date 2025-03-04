@@ -45,7 +45,7 @@ pub fn create_event_handler(
     let event = &mut ctx.accounts.event;
     event.id = ps.next_event_id;
     event.resolved = false;
-    event.description = description;
+    event.description = description.clone(); // Clone for event emission
     event.start_time = start_time;
     event.deadline = deadline;
     event.possible_outcomes = possible_outcomes;
@@ -55,7 +55,26 @@ pub fn create_event_handler(
     event.winning_outcome = None;
     event.total_bets_by_outcome = vec![0u64; event.possible_outcomes.len()];
 
-    ps.next_event_id = ps.next_event_id.checked_add(1).unwrap();
-    ps.active_vouchers_amount = ps.active_vouchers_amount.checked_add(voucher_amount).unwrap();
+    ps.next_event_id = ps.next_event_id.checked_add(1).ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+    ps.active_vouchers_amount = ps.active_vouchers_amount
+        .checked_add(voucher_amount)
+        .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+
+    // Emit event
+    emit!(EventCreated {
+        event_id: event.id,
+        description,
+        start_time,
+        deadline,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct EventCreated {
+    pub event_id: u64,
+    pub description: String,
+    pub start_time: i64,
+    pub deadline: i64,
 }

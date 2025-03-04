@@ -16,29 +16,39 @@ pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
     let program_state = &mut ctx.accounts.program_state;
     let clock = Clock::get()?;
 
-    require!(
-        program_state.owner == ctx.accounts.owner.key(),
-        EventBettingProtocolError::Unauthorized
-    );
-
+    // Check if event hasn't started
     require!(
         clock.unix_timestamp < event.start_time,
         EventBettingProtocolError::EventCannotBeEnded
     );
 
+    // Check no bets placed
     require!(
         event.total_pool == 0,
         EventBettingProtocolError::EventHasBets
     );
 
-    // Capture current voucher amount and update state.
-    let voucher = event.voucher_amount;
-    event.voucher_amount = 0;
-    if voucher > 0 {
+    // Update active vouchers amount with checked arithmetic
+    if event.voucher_amount > 0 {
         program_state.active_vouchers_amount = program_state
             .active_vouchers_amount
-            .checked_sub(voucher)
-            .unwrap();
+            .checked_sub(event.voucher_amount)
+            .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
     }
+
+    // Clear event data
+    event.voucher_amount = 0;
+    event.resolved = true; // Mark as resolved to prevent further interactions
+
+    // Emit event
+    emit!(EventRevoked {
+        event_id: event.id,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct EventRevoked {
+    pub event_id: u64,
 }

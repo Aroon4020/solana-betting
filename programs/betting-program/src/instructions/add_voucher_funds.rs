@@ -31,9 +31,10 @@ pub struct AddVoucherFunds<'info> {
 }
 
 pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
+    // Validate amount (matches Solidity's check)
     require!(amount > 0, EventBettingProtocolError::BetAmountZero);
 
-    // Update program state first
+    // Update program state with checked arithmetic
     ctx.accounts.program_state.accumulated_fees = ctx
         .accounts
         .program_state
@@ -41,7 +42,7 @@ pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> 
         .checked_add(amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
-    // Transfer tokens from user to fee pool.
+    // Transfer tokens from user to fee pool
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
@@ -53,5 +54,15 @@ pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> 
         ),
         amount,
     )?;
+
+    // Emit event (matches Solidity's event emission)
+    emit!(VoucherFundsAdded {
+        amount,
+    });
+
     Ok(())
+}
+#[event]
+pub struct VoucherFundsAdded {
+    pub amount: u64,
 }

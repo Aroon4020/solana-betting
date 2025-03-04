@@ -47,4 +47,6 @@ pub enum EventBettingProtocolError {
     EventHasBets,
     #[msg("Vouched amount cannot be zero")]
     VouchedAmountZero,
+    #[msg("Betting not started")]
+    BettingNotStarted,
 }

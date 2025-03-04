@@ -14,6 +14,17 @@ pub fn update_signer_handler(
     ctx: Context<UpdateSigner>,
     new_signer: Pubkey,
 ) -> Result<()> {
+    let old_signer = ctx.accounts.program_state.signer;
     ctx.accounts.program_state.signer = new_signer;
+    emit!(SignerUpdated {
+        old_signer,
+        new_signer,
+    });
     Ok(())
+}
+
+#[event]
+pub struct SignerUpdated {
+    pub old_signer: Pubkey,
+    pub new_signer: Pubkey,
 }

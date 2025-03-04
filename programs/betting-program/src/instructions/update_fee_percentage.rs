@@ -14,6 +14,21 @@ pub fn update_fee_percentage_handler(
     ctx: Context<UpdateFeePercentage>,
     new_fee_percentage: u64,
 ) -> Result<()> {
+
+    let old_fee = ctx.accounts.program_state.fee_percentage;
     ctx.accounts.program_state.fee_percentage = new_fee_percentage;
+
+    // Emit fee percentage updated event
+    emit!(FeePercentageUpdated {
+        old_fee,
+        new_fee: new_fee_percentage,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct FeePercentageUpdated {
+    pub old_fee: u64,
+    pub new_fee: u64,
 }

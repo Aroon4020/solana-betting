@@ -40,27 +40,31 @@ pub fn place_bet_handler(
     outcome: String,
     amount: u64,
 ) -> Result<()> {
-    // Define current_time before use.
-    let current_time = Clock::get()?.unix_timestamp;
+    let event = &mut ctx.accounts.event;
+    
+    // Validate amount
     require!(amount > 0, EventBettingProtocolError::BetAmountZero);
+    
+    // Time validations
+    let current_time = Clock::get()?.unix_timestamp;
     require!(
-        current_time < ctx.accounts.event.deadline,
+        current_time >= event.start_time,
+        EventBettingProtocolError::BettingNotStarted
+    );
+    require!(
+        current_time < event.deadline,
         EventBettingProtocolError::BettingClosed
     );
 
     // Lookup outcome index
-    let outcome_index = ctx
-        .accounts
-        .event
+    let outcome_index = event
         .possible_outcomes
         .iter()
         .position(|opt| opt == &outcome)
         .ok_or(EventBettingProtocolError::InvalidOutcome)?;
 
     // Update outcome total bets safely
-    ctx.accounts.event.total_bets_by_outcome[outcome_index] = ctx
-        .accounts
-        .event
+    event.total_bets_by_outcome[outcome_index] = event
         .total_bets_by_outcome[outcome_index]
         .checked_add(amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
@@ -88,8 +92,30 @@ pub fn place_bet_handler(
         );
     }
 
-    ctx.accounts.user_bet.amount = ctx.accounts.user_bet.amount.checked_add(amount).unwrap();
-    ctx.accounts.event.total_pool = ctx.accounts.event.total_pool.checked_add(amount).unwrap();
+    // Update amounts using checked arithmetic
+    ctx.accounts.user_bet.amount = ctx.accounts.user_bet.amount
+        .checked_add(amount)
+        .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+    
+    event.total_pool = event.total_pool
+        .checked_add(amount)
+        .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+
+    // Emit bet placed event
+    emit!(BetPlaced {
+        event_id: event.id,
+        user: ctx.accounts.user.key(),
+        amount,
+        outcome: outcome.clone(),
+    });
 
     Ok(())
+}
+
+#[event]
+pub struct BetPlaced {
+    pub event_id: u64,
+    pub user: Pubkey,
+    pub amount: u64,
+    pub outcome: String,
 }

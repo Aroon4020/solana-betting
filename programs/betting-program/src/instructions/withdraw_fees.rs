@@ -33,18 +33,36 @@ pub struct WithdrawFees<'info> {
 }
 
 pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
+    // Validate amount
     require!(amount != 0, EventBettingProtocolError::WithdrawAmountZero);
+    
+    // Validate owner
     let program_state = &mut ctx.accounts.program_state;
     require!(
         ctx.accounts.owner.key() == program_state.owner,
         EventBettingProtocolError::Unauthorized
     );
 
-    program_state.accumulated_fees = program_state
+    // Calculate maximum withdrawable amount (matches Solidity's check)
+    let max_withdrawable = program_state
         .accumulated_fees
-        .checked_sub(amount)
+        .checked_sub(program_state.active_vouchers_amount)
         .ok_or(EventBettingProtocolError::InsufficientFees)?;
 
+    // Adjust amount if it exceeds max withdrawable
+    let withdraw_amount = if amount > max_withdrawable {
+        max_withdrawable
+    } else {
+        amount
+    };
+
+    // Update accumulated fees
+    program_state.accumulated_fees = program_state
+        .accumulated_fees
+        .checked_sub(withdraw_amount)
+        .ok_or(EventBettingProtocolError::InsufficientFees)?;
+
+    // Transfer tokens
     let seeds = &[BETTING_STATE_SEED, &[ctx.bumps.program_state]];
     let signer = &[&seeds[..]];
 
@@ -58,7 +76,18 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
             },
             signer,
         ),
-        amount,
+        withdraw_amount,
     )?;
+
+    // Emit event
+    emit!(FeesWithdrawn {
+        amount: withdraw_amount,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct FeesWithdrawn {
+    pub amount: u64,
 }

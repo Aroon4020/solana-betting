@@ -16,10 +16,27 @@ pub fn increase_deadline_handler(
     new_deadline: i64,
 ) -> Result<()> {
     let event = &mut ctx.accounts.event;
+    
+    // Validate new deadline
     require!(
         new_deadline > event.deadline,
         EventBettingProtocolError::DeadlineInThePast
     );
+
+    // Update deadline
     event.deadline = new_deadline;
+
+    // Emit event
+    emit!(DeadlineIncreased {
+        event_id: event.id,
+        new_deadline,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct DeadlineIncreased {
+    pub event_id: u64,
+    pub new_deadline: i64,
 }

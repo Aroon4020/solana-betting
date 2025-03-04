@@ -29,6 +29,10 @@ pub struct ClaimWinnings<'info> {
 }
 
 pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
+    // Get necessary values before mutable borrow
+    let event_id = ctx.accounts.event.id;
+    let event_bump = ctx.bumps.event;
+
     let event = &mut ctx.accounts.event;
     let user_bet = &mut ctx.accounts.user_bet;
 
@@ -68,7 +72,7 @@ pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
                 to: ctx.accounts.user_token_account.to_account_info(),
                 authority: ctx.accounts.event.to_account_info(),
             },
-            &[&[EVENT_SEED, &ctx.accounts.event.id.to_le_bytes(), &[ctx.bumps.event]]],
+            &[&[EVENT_SEED, &event_id.to_le_bytes(), &[event_bump]]],
         ),
         payout,
     )?;
@@ -76,5 +80,19 @@ pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
     // Reset user's bet amount after claim
     user_bet.amount = 0;
 
+    // Emit winnings claimed event
+    emit!(WinningsClaimed {
+        event_id,
+        user: ctx.accounts.user.key(),
+        payout,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct WinningsClaimed {
+    pub event_id: u64,
+    pub user: Pubkey,
+    pub payout: u64,
 }
