@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use solana_program::sysvar::clock::Clock;
+use std::convert::TryInto;
 use crate::{state::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
@@ -15,10 +16,11 @@ pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
     let event = &mut ctx.accounts.event;
     let program_state = &mut ctx.accounts.program_state;
     let clock = Clock::get()?;
+    let current_time: u64 = clock.unix_timestamp.try_into().unwrap(); // Convert i64 to u64
 
     // Check if event hasn't started
     require!(
-        clock.unix_timestamp < event.start_time,
+        current_time < event.start_time,
         EventBettingProtocolError::EventCannotBeEnded
     );
 

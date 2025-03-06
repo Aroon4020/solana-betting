@@ -15,6 +15,7 @@ pub mod initialize_user_bet;
 pub mod update_signer;
 pub mod update_owner;
 pub mod initialize_event_pool;
+pub mod initialize_bet_vault;
 
 pub use initialize::*;
 pub use initialize_fee_pool::*;
@@ -33,3 +34,6 @@ pub use initialize_user_bet::*;
 pub use update_signer::*;
 pub use update_owner::*;
 pub use initialize_event_pool::*;
+pub use initialize::Initialize;
+pub use initialize::handler;
+pub use initialize_bet_vault::{InitializeBetVault, initialize_bet_vault_handler};

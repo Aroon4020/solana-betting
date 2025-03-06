@@ -3,6 +3,8 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use solana_program::account_info::AccountInfo;
 use solana_program::sysvar::clock::Clock;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
+use crate::utils::outcome_hasher::hash_outcome;
+use std::convert::TryInto;
 
 #[derive(Accounts)]
 pub struct PlaceBetWithVoucher<'info> {
@@ -67,12 +69,13 @@ pub fn place_bet_with_voucher_handler(
 
     // Time validation
     let clock = Clock::get()?;
+    let current_time: u64 = clock.unix_timestamp.try_into().unwrap();
     require!(
-        clock.unix_timestamp >= event.start_time,
+        current_time >= event.start_time,
         EventBettingProtocolError::BettingNotStarted
     );
     require!(
-        clock.unix_timestamp < event.deadline,
+        current_time < event.deadline,
         EventBettingProtocolError::BettingClosed
     );
 
@@ -128,10 +131,11 @@ pub fn place_bet_with_voucher_handler(
         .checked_add(vouched_amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
+    let outcome_hash = hash_outcome(&outcome);
     let outcome_index = event
-        .possible_outcomes
+        .outcomes
         .iter()
-        .position(|x| x == &outcome)
+        .position(|x| *x == outcome_hash)
         .ok_or(EventBettingProtocolError::InvalidOutcome)?;
 
     let total_bet = amount
@@ -149,11 +153,11 @@ pub fn place_bet_with_voucher_handler(
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
     // Update user bet
-    if user_bet.outcome.is_empty() {
-        user_bet.outcome = outcome.clone();
+    if user_bet.outcome == [0u8; 32] {
+        user_bet.outcome = outcome_hash;
     } else {
         require!(
-            user_bet.outcome == outcome,
+            user_bet.outcome == outcome_hash,
             EventBettingProtocolError::InvalidOutcome
         );
     }

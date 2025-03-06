@@ -41,12 +41,13 @@ pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
         .winning_outcome
         .as_ref()
         .ok_or(EventBettingProtocolError::EventNotResolvedYet)?;
+    // Compare fixed hash values instead of strings
     require!(winning == &user_bet.outcome, EventBettingProtocolError::InvalidOutcome);
     require!(user_bet.amount > 0, EventBettingProtocolError::NoWinningsToClaim);
 
     // Compute winning index and ensure valid total winning bets
     let win_idx = event
-        .possible_outcomes
+        .outcomes
         .iter()
         .position(|opt| opt == winning)
         .ok_or(EventBettingProtocolError::InvalidOutcome)?;

@@ -5,6 +5,8 @@ use solana_program::sysvar::clock::Clock;
 use crate::state::*;
 use crate::constants::*;
 use crate::error::EventBettingProtocolError;
+use crate::utils::outcome_hasher::hash_outcome;
+use std::convert::TryInto;
 
 #[derive(Accounts)]
 pub struct ResolveEvent<'info> {
@@ -47,15 +49,17 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
     let fee_pool = &ctx.accounts.fee_pool;
     let token_program = &ctx.accounts.token_program;
     let program_state = &mut ctx.accounts.program_state;
+    let clock = Clock::get()?;
+    // Convert clock.unix_timestamp to u64
+    let current_time: u64 = clock.unix_timestamp.try_into().unwrap();
 
     // Security checks
     require!(
         program_state.owner == ctx.accounts.owner.key(),
         EventBettingProtocolError::Unauthorized
     );
-    let clock = Clock::get()?;
     require!(
-        clock.unix_timestamp >= event.deadline,
+        current_time >= event.deadline,
         EventBettingProtocolError::EventStillActive
     );
     require!(
@@ -63,14 +67,22 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
         EventBettingProtocolError::EventAlreadyResolved
     );
 
-    // Validate winning outcome index
-    let winning_index = event
-        .possible_outcomes
-        .iter()
-        .position(|x| x == &winning_outcome)
-        .ok_or(EventBettingProtocolError::InvalidWinningOutcome)?;
+    // Convert winning outcome to hash
+    let winning_hash = hash_outcome(&winning_outcome);
+
+    // Validate winning outcome hash
+    require!(
+        event.outcomes.contains(&winning_hash),
+        EventBettingProtocolError::InvalidWinningOutcome
+    );
 
     // Handle zero winning outcome case
+    let winning_index = event
+        .outcomes
+        .iter()
+        .position(|x| x == &winning_hash)
+        .ok_or(EventBettingProtocolError::InvalidWinningOutcome)?;
+
     if event.total_bets_by_outcome[winning_index] == 0 {
         program_state.accumulated_fees = program_state.accumulated_fees
             .checked_add(event.total_pool)
@@ -150,7 +162,7 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
 
     // Mark event as resolved
     event.resolved = true;
-    event.winning_outcome = Some(winning_outcome.clone());
+    event.winning_outcome = Some(winning_hash);
 
     // Emit event
     emit!(EventResolved {

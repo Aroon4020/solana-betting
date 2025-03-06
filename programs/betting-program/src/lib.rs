@@ -5,8 +5,9 @@ mod error;
 mod state;
 mod constants;
 mod instructions;
+pub mod utils; // Expose utils module
 
-use instructions::*;
+use instructions::*; // re-exports types like Initialize
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -14,9 +15,13 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 pub mod event_betting {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, fee_percentage: u64, signer: Pubkey) -> Result<()> {
-        // Call the function "handler" as defined in initialize.rs
-        instructions::initialize::handler(ctx, fee_percentage, signer)
+    pub fn initialize(
+        ctx: Context<Initialize>, 
+        fee_percentage: u64, 
+        signer: Pubkey, 
+        token_mint: Pubkey
+    ) -> Result<()> {
+        initialize::handler(ctx, fee_percentage, signer, token_mint)
     }
 
     pub fn create_event(
@@ -27,12 +32,19 @@ pub mod event_betting {
         possible_outcomes: Vec<String>,
         voucher_amount: u64,
     ) -> Result<()> {
-        instructions::create_event::create_event_handler(ctx, description, start_time, deadline, possible_outcomes, voucher_amount)
+        instructions::create_event::create_event_handler(
+            ctx,
+            description,
+            start_time.try_into().unwrap(),  // Convert i64 to u64
+            deadline.try_into().unwrap(),    // Convert i64 to u64
+            possible_outcomes,
+            voucher_amount,
+        )
     }
 
-    pub fn initialize_fee_pool(ctx: Context<InitializeFeePool>) -> Result<()> {
-        instructions::initialize_fee_pool::initialize_fee_pool_handler(ctx)
-    }
+    // pub fn initialize_fee_pool(ctx: Context<InitializeFeePool>) -> Result<()> {
+    //     instructions::initialize_fee_pool::initialize_fee_pool_handler(ctx)
+    // }
 
     pub fn place_bet(
         ctx: Context<PlaceBet>,
@@ -85,7 +97,7 @@ pub mod event_betting {
         ctx: Context<IncreaseDeadline>,
         new_deadline: i64,
     ) -> Result<()> {
-        instructions::increase_deadline::increase_deadline_handler(ctx, new_deadline)
+        instructions::increase_deadline::increase_deadline_handler(ctx, new_deadline.try_into().unwrap())
     }
 
     pub fn update_fee_percentage(

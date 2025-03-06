@@ -8,28 +8,25 @@ pub struct IncreaseDeadline<'info> {
     pub program_state: Account<'info, ProgramState>,
     #[account(mut)]
     pub event: Account<'info, Event>,
-    pub owner: Signer<'info>, // Mark owner as mut for consistency
+    pub owner: Signer<'info>,
 }
 
 pub fn increase_deadline_handler(
     ctx: Context<IncreaseDeadline>,
-    new_deadline: i64,
+    new_deadline: u64,   // now u64
 ) -> Result<()> {
     let event = &mut ctx.accounts.event;
     
-    // Validate new deadline
     require!(
         new_deadline > event.deadline,
         EventBettingProtocolError::DeadlineInThePast
     );
 
-    // Update deadline
     event.deadline = new_deadline;
 
-    // Emit event
     emit!(DeadlineIncreased {
         event_id: event.id,
-        new_deadline,
+        new_deadline, // now u64
     });
 
     Ok(())
@@ -38,5 +35,5 @@ pub fn increase_deadline_handler(
 #[event]
 pub struct DeadlineIncreased {
     pub event_id: u64,
-    pub new_deadline: i64,
+    pub new_deadline: u64, // changed to u64
 }
