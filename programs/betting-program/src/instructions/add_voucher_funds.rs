@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
+use anchor_spl::associated_token::get_associated_token_address;
+use solana_program::pubkey::Pubkey;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
@@ -31,18 +33,29 @@ pub struct AddVoucherFunds<'info> {
 }
 
 pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
-    // Validate amount (matches Solidity's check)
+    // Require non-zero amount.
     require!(amount > 0, EventBettingProtocolError::BetAmountZero);
 
-    // Update program state with checked arithmetic
-    ctx.accounts.program_state.accumulated_fees = ctx
-        .accounts
-        .program_state
-        .accumulated_fees
+    // Validate that the provided sender's ATA is correct.
+    let expected_sender_ata = get_associated_token_address(&ctx.accounts.fund_source.key(), &ctx.accounts.token_mint.key());
+    require!(
+        *ctx.accounts.user_token_account.to_account_info().key == expected_sender_ata,
+        EventBettingProtocolError::InvalidUserATA
+    );
+
+    // Validate fee pool PDA.
+    let (expected_fee_pool, _bump) = Pubkey::find_program_address(&[BETTING_STATE_SEED, FEE_POOL_SEED], ctx.program_id);
+    require!(
+        ctx.accounts.fee_pool.key() == expected_fee_pool,
+        EventBettingProtocolError::InvalidFeePoolATA
+    );
+
+    // Update accumulated fees in program state.
+    ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
         .checked_add(amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
-    // Transfer tokens from user to fee pool
+    // Transfer tokens from fund source to fee pool.
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
@@ -55,13 +68,10 @@ pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> 
         amount,
     )?;
 
-    // Emit event (matches Solidity's event emission)
-    emit!(VoucherFundsAdded {
-        amount,
-    });
-
+    emit!(VoucherFundsAdded { amount });
     Ok(())
 }
+
 #[event]
 pub struct VoucherFundsAdded {
     pub amount: u64,

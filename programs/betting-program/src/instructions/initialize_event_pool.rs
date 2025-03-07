@@ -18,8 +18,7 @@ pub struct InitializeEventPool<'info> {
         ],
         bump,
         token::mint = token_mint, // Initialize event_pool as TokenAccount with token_mint
-        token::authority = event,    // Event PDA as authority
-        //space = 8, // Remove space, TokenAccounts have fixed size
+        token::authority = event    // Event PDA as authority
     )]
     pub event_pool: Account<'info, TokenAccount>, // Initialize event_pool as TokenAccount
 
@@ -31,6 +30,6 @@ pub struct InitializeEventPool<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn initialize_event_pool_handler(ctx: Context<InitializeEventPool>) -> Result<()> {
+pub fn initialize_event_pool_handler(_ctx: Context<InitializeEventPool>) -> Result<()> {
     Ok(())
 }

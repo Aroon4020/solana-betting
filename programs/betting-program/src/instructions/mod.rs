@@ -1,39 +1,27 @@
 pub mod initialize;
-pub mod initialize_fee_pool;
 pub mod create_event;
-pub mod place_bet;
-pub mod place_bet_with_voucher;
+pub mod place_bet;   // Added place_bet module
 pub mod resolve_event;
 pub mod claim_winnings;
 pub mod update_voucher_amount;
 pub mod withdraw_fees;
 pub mod revoke_event;
 pub mod increase_deadline;
-pub mod update_fee_percentage;
+pub mod update_config;
 pub mod add_voucher_funds;
-pub mod initialize_user_bet;
-pub mod update_signer;
-pub mod update_owner;
 pub mod initialize_event_pool;
-pub mod initialize_bet_vault;
+pub mod close_user_bet;  // Newly added closing instruction
 
 pub use initialize::*;
-pub use initialize_fee_pool::*;
 pub use create_event::*;
-pub use place_bet::*;
-pub use place_bet_with_voucher::*;
+pub use place_bet::*;   // Re-export PlaceBet types and handler
 pub use resolve_event::*;
 pub use claim_winnings::*;
 pub use update_voucher_amount::*;
 pub use withdraw_fees::*;
 pub use revoke_event::*;
 pub use increase_deadline::*;
-pub use update_fee_percentage::*;
+pub use update_config::*;
 pub use add_voucher_funds::*;
-pub use initialize_user_bet::*;
-pub use update_signer::*;
-pub use update_owner::*;
 pub use initialize_event_pool::*;
-pub use initialize::Initialize;
-pub use initialize::handler;
-pub use initialize_bet_vault::{InitializeBetVault, initialize_bet_vault_handler};
+pub use close_user_bet::*;  // Re-export the new close_user_bet handler

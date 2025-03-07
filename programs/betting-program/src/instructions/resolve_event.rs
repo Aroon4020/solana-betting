@@ -5,8 +5,9 @@ use solana_program::sysvar::clock::Clock;
 use crate::state::*;
 use crate::constants::*;
 use crate::error::EventBettingProtocolError;
-use crate::utils::outcome_hasher::hash_outcome;
+use crate::utils::outcome_formatter::format_outcome; // Updated import
 use std::convert::TryInto;
+use solana_program::pubkey::Pubkey;
 
 #[derive(Accounts)]
 pub struct ResolveEvent<'info> {
@@ -45,19 +46,27 @@ pub struct ResolveEvent<'info> {
 }
 
 pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String) -> Result<()> {
+    let program_state = &mut ctx.accounts.program_state;
+    // Added Owner Check: Only the owner can resolve the event.
+    require!(
+        program_state.owner == ctx.accounts.owner.key(),
+        EventBettingProtocolError::Unauthorized
+    );
+    // Validate fee pool ATA: compute expected fee pool PDA using the seeds.
+    let (expected_fee_pool, _bump) = Pubkey::find_program_address(&[BETTING_STATE_SEED, FEE_POOL_SEED], ctx.program_id);
+    if ctx.accounts.fee_pool.key() != expected_fee_pool {
+        return Err(EventBettingProtocolError::InvalidFeePoolATA.into());
+    }
+    // Additionally, the account constraints verify that ctx.accounts.fee_pool.mint equals token_mint
+
     let event = &mut ctx.accounts.event;
     let fee_pool = &ctx.accounts.fee_pool;
     let token_program = &ctx.accounts.token_program;
-    let program_state = &mut ctx.accounts.program_state;
     let clock = Clock::get()?;
     // Convert clock.unix_timestamp to u64
     let current_time: u64 = clock.unix_timestamp.try_into().unwrap();
 
     // Security checks
-    require!(
-        program_state.owner == ctx.accounts.owner.key(),
-        EventBettingProtocolError::Unauthorized
-    );
     require!(
         current_time >= event.deadline,
         EventBettingProtocolError::EventStillActive
@@ -67,12 +76,12 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
         EventBettingProtocolError::EventAlreadyResolved
     );
 
-    // Convert winning outcome to hash
-    let winning_hash = hash_outcome(&winning_outcome);
+    // Format winning outcome as fixed-size 20-byte array.
+    let winning_formatted = format_outcome(&winning_outcome);
 
     // Validate winning outcome hash
     require!(
-        event.outcomes.contains(&winning_hash),
+        event.outcomes.contains(&winning_formatted),
         EventBettingProtocolError::InvalidWinningOutcome
     );
 
@@ -80,7 +89,7 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
     let winning_index = event
         .outcomes
         .iter()
-        .position(|x| x == &winning_hash)
+        .position(|x| x == &winning_formatted)
         .ok_or(EventBettingProtocolError::InvalidWinningOutcome)?;
 
     if event.total_bets_by_outcome[winning_index] == 0 {
@@ -162,7 +171,7 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
 
     // Mark event as resolved
     event.resolved = true;
-    event.winning_outcome = Some(winning_hash);
+    event.winning_outcome = Some(winning_formatted);
 
     // Emit event
     emit!(EventResolved {

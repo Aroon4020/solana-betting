@@ -13,6 +13,12 @@ pub struct RevokeEvent<'info> {
 }
 
 pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
+    // Owner check: Ensure the caller is the program owner.
+    require!(
+        ctx.accounts.program_state.owner == ctx.accounts.owner.key(),
+        EventBettingProtocolError::Unauthorized
+    );
+
     let event = &mut ctx.accounts.event;
     let program_state = &mut ctx.accounts.program_state;
     let clock = Clock::get()?;

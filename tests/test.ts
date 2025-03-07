@@ -1,310 +1,389 @@
-// import * as anchor from "@coral-xyz/anchor";
-// import { Program } from "@coral-xyz/anchor";
-// import { EventBetting } from "../target/types/event_betting";
-// import { assert } from "chai";
-// import {
-//     createMint,
-//     createAccount,
-//     mintTo,
-//     TOKEN_PROGRAM_ID,
-//     getAccount,
-//     getAssociatedTokenAddress,
-//     createAssociatedTokenAccountInstruction,
-//     createInitializeAccountInstruction,
-// } from "@solana/spl-token";
-// import { SystemProgram } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+import { Program, web3 } from "@coral-xyz/anchor";
+import { EventBetting } from "../target/types/event_betting";
+import { assert } from "chai";
+import {
+  createMint,
+  getAssociatedTokenAddress,
+  getAccount,
+  mintTo,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+} from "@solana/spl-token";
+import {
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  Keypair,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
+import { Buffer } from "buffer";
 
-// describe("sequential_betting_actions", () => {
-//     const provider = anchor.AnchorProvider.env();
-//     anchor.setProvider(provider);
-//     const program = anchor.workspace.EventBetting as Program<EventBetting>;
-// console.log("Program ID:", program.programId.toBase58()); // <--- ADD THIS LINE
+anchor.setProvider(anchor.AnchorProvider.env());
+const provider = anchor.getProvider() as anchor.AnchorProvider;
+const program = anchor.workspace.EventBetting as Program<EventBetting>;
 
-//     let mint: anchor.web3.PublicKey;
-//     let eventId: number;
-//     let event: anchor.web3.PublicKey;
-//     let userTokenAccount: anchor.web3.PublicKey;
-//     let eventPool: anchor.web3.PublicKey;
-//     let userBet: anchor.web3.PublicKey;
-//     let programState: anchor.web3.PublicKey;
-//     let user: anchor.web3.Keypair;
-//     let owner: anchor.web3.Keypair;
-//     let programAuthority: anchor.web3.PublicKey;
-//     let feePool: anchor.web3.PublicKey;
-//     let feePoolTokenAccount: anchor.web3.PublicKey;
-//     let ownerTokenAccount: anchor.web3.PublicKey;
-//     const WITHDRAW_AMOUNT = new anchor.BN(500);
-//     const BET_AMOUNT = new anchor.BN(100000000); // 100 tokens
+// Global constants and variables
+const BETTING_STATE_SEED = "program_state";
+const FEE_POOL_SEED = "fee_pool";
+const EVENT_SEED = "event";
+const USER_BET_SEED = "user_bet";
 
+let owner = Keypair.generate();
+let user = Keypair.generate();
+let programAuthority = Keypair.generate();
 
-//     before(async () => { // Use before() hook for ALL setup
-//         owner = anchor.web3.Keypair.generate();
-//         console.log("Owner public key (in 'before' hook): ", owner.publicKey.toBase58());
-//         user = anchor.web3.Keypair.generate();
-//         console.log("User public key (in 'before' hook): ", user.publicKey.toBase58());
+let tokenMint: PublicKey;
+let programStatePDA: PublicKey;
+let feePoolPDA: PublicKey;
+let eventPDA: PublicKey;
+let eventPoolPDA: PublicKey;
+let userBetPDA: PublicKey;
+let currentEventId: anchor.BN;
+let eventStartTime: number; // new global variable for event start time
 
-//         // Airdrop SOL to Owner and User
-//         await Promise.all([
-//             provider.connection.requestAirdrop(owner.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL),
-//             provider.connection.requestAirdrop(user.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
-//         ]).then(signatures => Promise.all(signatures.map(sig => provider.connection.confirmTransaction(sig))));
+describe("EventBetting Program Tests", () => {
+  it("Setup and initialize program", async () => {
+    // Airdrop SOL to owner and user
+    await Promise.all([
+      provider.connection.requestAirdrop(owner.publicKey, 100 * LAMPORTS_PER_SOL),
+      provider.connection.requestAirdrop(user.publicKey, 50 * LAMPORTS_PER_SOL),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-//         // Program PDAs
-//         [programAuthority] = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("program_authority")],
-//             program.programId
-//         );
-//         [programState] = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("program_state")],
-//             program.programId
-//         );
-//         [feePool] = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("program_state"), Buffer.from("fee_pool")],
-//             program.programId
-//         );
+    // Create token mint
+    tokenMint = await createMint(
+      provider.connection,
+      owner,
+      owner.publicKey,
+      null,
+      9
+    );
+    console.log("Token mint created:", tokenMint.toBase58());
 
+    // Derive PDAs for program state and fee pool
+    [programStatePDA] = await PublicKey.findProgramAddress(
+      [Buffer.from(BETTING_STATE_SEED)],
+      program.programId
+    );
+    [feePoolPDA] = await PublicKey.findProgramAddress(
+      [Buffer.from(BETTING_STATE_SEED), Buffer.from(FEE_POOL_SEED)],
+      program.programId
+    );
+    console.log("Program state PDA:", programStatePDA.toBase58());
+    console.log("Fee pool PDA:", feePoolPDA.toBase58());
 
-//         // Initialize program - Owner initializes ONCE in 'before'
-//         await program.methods
-//             .initialize(new anchor.BN(100), owner.publicKey)
-//             .accounts({
-//                 programState,
-//                 owner: owner.publicKey,
-//                 systemProgram: anchor.web3.SystemProgram.programId,
-//             })
-//             .signers([owner])
-//             .rpc();
-//         console.log("Program initialized (once in 'before' hook)");
+    // Initialize program state
+    await program.methods
+      .initialize(new anchor.BN(1000), programAuthority.publicKey, tokenMint)
+      .accounts({
+        programState: programStatePDA,
+        feePool: feePoolPDA,
+        owner: owner.publicKey,
+        tokenMint: tokenMint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Program state initialized.");
+  });
 
-//         // Create token mint - Owner is Minter, create ONCE in 'before'
-//         mint = await createMint(
-//             provider.connection,
-//             owner,
-//             owner.publicKey,
-//             null,
-//             6
-//         );
-//         console.log("Mint (created once in 'before' hook): ", mint.toBase58());
+  it("Add voucher funds", async () => {
+    // Ensure owner's ATA exists
+    const ownerTokenAccount = await getAssociatedTokenAddress(tokenMint, owner.publicKey);
+    try {
+      await getAccount(provider.connection, ownerTokenAccount);
+    } catch {
+      const ix = createAssociatedTokenAccountInstruction(
+        owner.publicKey,
+        ownerTokenAccount,
+        owner.publicKey,
+        tokenMint
+      );
+      const tx = new Transaction().add(ix);
+      await provider.sendAndConfirm(tx, [owner]);
+    }
+    // Mint tokens to owner's ATA
+    await mintTo(
+      provider.connection,
+      owner,
+      tokenMint,
+      ownerTokenAccount,
+      owner,
+      1000000000
+    );
+    const voucherAmount = new anchor.BN(50000);
+    await program.methods
+      .addVoucherFunds(voucherAmount)
+      .accounts({
+        programState: programStatePDA,
+        userTokenAccount: ownerTokenAccount,
+        feePool: feePoolPDA,
+        fundSource: owner.publicKey,
+        tokenMint: tokenMint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Voucher funds added:", voucherAmount.toString());
+    // Assert fee pool increased.
+    const feePoolAcct = await getAccount(provider.connection, feePoolPDA);
+    assert.isTrue(new anchor.BN(feePoolAcct.amount.toString()).gte(voucherAmount));
+  });
 
-//         // Owner and User Token Accounts - DERIVE ADDRESSES
-//         ownerTokenAccount = await getAssociatedTokenAddress(mint, owner.publicKey);
-//         userTokenAccount = await getAssociatedTokenAddress(mint, user.publicKey);
-//         feePoolTokenAccount = await getAssociatedTokenAddress(mint, feePool, true); // Derive Fee Pool ATA
+  it("Create an event and initialize event pool", async () => {
+    const eventDescription = "Test Event";
+    const now = Math.floor(Date.now() / 1000);
+    // Use minimal start time but longer deadline to allow bets
+    const startTime = now + 2;
+    const deadline = now + 30; // Updated: extend deadline to 30 seconds from now
+    const outcomes = ["Outcome 1", "Outcome 2"];
+    const voucherAmt = 30000;
 
-//         console.log("Owner Token Account (derived in 'before' hook): ", ownerTokenAccount.toBase58());
-//         console.log("User Token Account (derived in 'before' hook): ", userTokenAccount.toBase58());
-//         console.log("Fee Pool Token Account (derived in 'before' hook): ", feePoolTokenAccount.toBase58());
-        
-//         try {
-//             console.log("=== Debugging Fee Pool Token Account Initialization - Step 2 - Before sendAndConfirm ===");
-//             const createAccountIx = anchor.web3.SystemProgram.createAccount({
-//                 fromPubkey: owner.publicKey,
-//                 newAccountPubkey: feePoolTokenAccount,
-//                 space: 165,
-//                 lamports: minRentExemption,
-//                 programId: TOKEN_PROGRAM_ID,
-//             });
-//             const initializeAccountIx = createInitializeAccountInstruction({
-//                 account: feePoolTokenAccount,
-//                 mint: mint,
-//                 owner: feePool,
-//             }, TOKEN_PROGRAM_ID);
+    const programState = await program.account.programState.fetch(programStatePDA);
+    currentEventId = new anchor.BN(programState.next_event_id);
+    eventStartTime = startTime; // store minimal start time
+    [eventPDA] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from(EVENT_SEED),
+        currentEventId.toArrayLike(Buffer, "le", 8)
+      ],
+      program.programId
+    );
+    await program.methods
+      .createEvent(
+        eventDescription,
+        new anchor.BN(startTime), 
+        new anchor.BN(deadline),
+        outcomes,
+        new anchor.BN(voucherAmt)
+      )
+      .accounts({
+        programState: programStatePDA,
+        event: eventPDA,
+        owner: owner.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Event created with ID:", currentEventId.toString());
+    const eventAccount = await program.account.event.fetch(eventPDA);
+    assert.equal(eventAccount.description, eventDescription);
 
-//             const tx = new anchor.web3.Transaction().add(createAccountIx, initializeAccountIx);
+    [eventPoolPDA] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from(EVENT_SEED),
+        currentEventId.toArrayLike(Buffer, "le", 8),
+        Buffer.from("pool")
+      ],
+      program.programId
+    );
+    await program.methods
+      .initializeEventPool()
+      .accounts({
+        event: eventPDA,
+        eventPool: eventPoolPDA,
+        payer: owner.publicKey,
+        tokenMint: tokenMint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Event pool initialized:", eventPoolPDA.toBase58());
+  });
 
-//             // ++++++++ Log Instructions and Accounts ++++++++
-//             console.log("=== Debugging - Instructions in Transaction ===");
-//             tx.instructions.forEach((ix, index) => {
-//                 console.log(`--- Instruction ${index + 1} ---`);
-//                 console.log("Program ID:", ix.programId.toBase58());
-//                 console.log("Accounts:", ix.keys); // Log instruction accounts
-//                 console.log("Data (length):", ix.data.length); // Log data length
-//                 // Optionally, for specific instructions, try to decode data if you know the format
-//             });
-//             console.log("==========================================");
-//             // ++++++++ End Log Instructions and Accounts ++++++++
+  it("Place bet without voucher", async () => {
+    // Wait until event start time with extra margin of 2 seconds.
+    let currentTime = Math.floor(Date.now() / 1000);
+    const waitMargin = 2; // extra seconds margin
+    if (currentTime < eventStartTime + waitMargin) {
+      const delay = ((eventStartTime + waitMargin) - currentTime) * 1000;
+      console.log("Waiting", delay, "ms for betting to start (with margin)");
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    // Ensure user's ATA exists and fund it
+    const userTokenAccount = await getAssociatedTokenAddress(tokenMint, user.publicKey);
+    try {
+      await getAccount(provider.connection, userTokenAccount);
+    } catch {
+      const ix = createAssociatedTokenAccountInstruction(
+        owner.publicKey,
+        userTokenAccount,
+        user.publicKey,
+        tokenMint
+      );
+      const tx = new Transaction().add(ix);
+      await provider.sendAndConfirm(tx, [owner]);
+    }
+    await mintTo(
+      provider.connection,
+      owner,
+      tokenMint,
+      userTokenAccount,
+      owner,
+      500000000
+    );
+    const outcome = "Outcome 1";
+    const betAmount = new anchor.BN(5000);
+    const voucherAmount = new anchor.BN(0);
+    // Change: derive userBetPDA using currentEventId rather than eventPDA.toBuffer()
+    [userBetPDA] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from(USER_BET_SEED),
+        user.publicKey.toBuffer(),
+        currentEventId.toArrayLike(Buffer, "le", 8)
+      ],
+      program.programId
+    );
+    await program.methods
+      .placeBet(outcome, betAmount, voucherAmount)
+      .accounts({
+        programState: programStatePDA,
+        adminSigner: programAuthority.publicKey,
+        event: eventPDA,
+        userBet: userBetPDA,
+        userTokenAccount: userTokenAccount,
+        eventPool: eventPoolPDA,
+        feePool: feePoolPDA,
+        user: user.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user, programAuthority])
+      .rpc();
+    console.log("Bet placed without voucher by user:", user.publicKey.toBase58());
+    const userBetAccount = await program.account.userBet.fetch(userBetPDA);
+    assert.isTrue(userBetAccount.amount.eq(betAmount));
+  });
 
+  it("Place bet with voucher", async () => {
+    // Fund user's ATA additionally if needed
+    const userTokenAccount = await getAssociatedTokenAddress(tokenMint, user.publicKey);
+    await mintTo(
+      provider.connection,
+      owner,
+      tokenMint,
+      userTokenAccount,
+      owner,
+      500000000
+    );
+    const outcome = "Outcome 1";
+    const betAmount = new anchor.BN(5000);
+    const voucherAmount = new anchor.BN(2000);
+    // Derive userBetPDA using currentEventId
+    [userBetPDA] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from(USER_BET_SEED),
+        user.publicKey.toBuffer(),
+        currentEventId.toArrayLike(Buffer, "le", 8)
+      ],
+      program.programId
+    );
+    // Fetch the current user bet amount (if any)
+    let existingAmount = new anchor.BN(0);
+    try {
+      const existingBet = await program.account.userBet.fetch(userBetPDA);
+      existingAmount = existingBet.amount;
+    } catch (err) {
+      // No existing user bet, so set to 0.
+    }
+    await program.methods
+      .placeBet(outcome, betAmount, voucherAmount)
+      .accounts({
+        programState: programStatePDA,
+        adminSigner: programAuthority.publicKey,
+        event: eventPDA,
+        userBet: userBetPDA,
+        userTokenAccount: userTokenAccount,
+        eventPool: eventPoolPDA,
+        feePool: feePoolPDA,
+        user: user.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user, programAuthority])
+      .rpc();
+    console.log("Bet placed with voucher by user:", user.publicKey.toBase58());
+    const userBetAccount = await program.account.userBet.fetch(userBetPDA);
+    // Expected total is the previous amount plus new bet amounts.
+    const expectedTotal = existingAmount.add(betAmount).add(voucherAmount);
+    assert.isTrue(userBetAccount.amount.eq(expectedTotal));
+  });
 
-//             console.log("=== Debugging Fee Pool Token Account Initialization - Step 3 - Transaction Created ===");
-//             txSig = await provider.sendAndConfirm(tx, [owner]);
-//             console.log("=== Debugging Fee Pool Token Account Initialization - Step 4 - After sendAndConfirm ===");
-//             console.log("Fee Pool Token Account initialized (explicitly in test) - Tx Sig:", txSig);
-//         } catch (error) {
-//             console.error("Error during Fee Pool Token Account initialization:", error);
-//         }
-//         console.log("=== Debugging Fee Pool Token Account Initialization - Step 5 - After Try-Catch ==="); // Step 5 Log
-//         // +++++++ EXPLICITLY CREATE Owner and Fee Pool ATAs ++++++++
-//         await Promise.all([
-//             provider.sendAndConfirm(new anchor.web3.Transaction().add(
-//                 createAssociatedTokenAccountInstruction(owner.publicKey, ownerTokenAccount, owner.publicKey, mint) // Create Owner ATA
-//             ), [owner]),
-//             provider.sendAndConfirm(new anchor.web3.Transaction().add( // Create Fee Pool ATA - PAYER is Owner
-//                 createAssociatedTokenAccountInstruction(owner.publicKey, feePoolTokenAccount, feePool, mint) // Fee Pool PDA as owner
-//             ), [owner]), // Owner pays for Fee Pool ATA creation
-//             provider.sendAndConfirm(new anchor.web3.Transaction().add(createAssociatedTokenAccountInstruction(user.publicKey, userTokenAccount, user.publicKey, mint)), [user]) // User ATA creation remains
-//         ]);
-//         console.log("Owner, Fee Pool, and User token accounts created");
+  it("Resolve event", async () => {
+    // Fetch event account to get the new (shortened) deadline.
+    let eventAccount = await program.account.event.fetch(eventPDA);
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (currentTime < eventAccount.deadline) {
+      const delay = (eventAccount.deadline - currentTime + 1) * 1000; // minimal wait time
+      console.log("Waiting", delay, "ms for event deadline to pass");
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    await program.methods
+      .resolveEvent("Outcome 1")
+      .accounts({
+        programState: programStatePDA,
+        event: eventPDA,
+        program_authority: programAuthority.publicKey,
+        eventPool: eventPoolPDA,
+        feePool: feePoolPDA,
+        tokenMint: tokenMint,
+        token_program: TOKEN_PROGRAM_ID,
+        owner: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Event resolved.");
+    eventAccount = await program.account.event.fetch(eventPDA);
+    assert.isTrue(eventAccount.resolved);
+  });
 
+  it("Claim winnings", async () => {
+    const userTokenAccount = await getAssociatedTokenAddress(tokenMint, user.publicKey);
+    const before = await getAccount(provider.connection, userTokenAccount);
+    await program.methods
+      .claimWinnings()
+      .accounts({
+        event: eventPDA,
+        userBet: userBetPDA,
+        userTokenAccount: userTokenAccount,
+        eventPool: eventPoolPDA,
+        user: user.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
+    console.log("Winnings claimed by user:", user.publicKey.toBase58());
+    const after = await getAccount(provider.connection, userTokenAccount);
+    assert.isTrue(new anchor.BN(after.amount.toString()).gt(new anchor.BN(before.amount.toString())));
+  });
 
-//         // Mint tokens to user - Owner is Minter
-//         await mintTo(provider.connection, owner, mint, userTokenAccount, owner.publicKey, 1000000000);
-//         console.log("Tokens minted to user");
-
-
-//          // Initialize fee pool - Owner initializes fee pool ONCE in 'before'
-//          await program.methods.initializeFeePool().accounts({ // Simplified accounts
-//             feePool, // Still pass feePool PDA address for consistency
-//             authority: owner.publicKey,
-//             programState,
-//             programAuthority,
-//             tokenMint: mint,
-//             tokenProgram: TOKEN_PROGRAM_ID,
-//             systemProgram: anchor.web3.SystemProgram.programId,
-//             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//         }).signers([owner]).rpc();
-//         console.log("Fee Pool initialized (once in 'before' hook)");
-
-//         // Create event - Owner creates event ONCE in 'before'
-//         eventId = 0;
-//         const eventIdBuffer = Buffer.from(new Array(8).fill(0));
-//         eventIdBuffer.writeUInt32LE(eventId, 0);
-//         event = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("event"), eventIdBuffer],
-//             program.programId
-//         )[0]; // Directly assign the PublicKey from array
-
-//         const now = Math.floor(Date.now() / 1000);
-//         await program.methods
-//             .createEvent("Test Event", new anchor.BN(now + 1), new anchor.BN(now + 2), ["outcome1", "outcome2"], new anchor.BN(0))
-//             .accounts({
-//                 programState,
-//                 event,
-//                 owner: owner.publicKey,
-//                 systemProgram: anchor.web3.SystemProgram.programId,
-//             })
-//             .signers([owner])
-//             .rpc();
-//         console.log("Event created");
-
-//         // Initialize event pool - Owner initializes event pool ONCE in 'before'
-//         eventPool = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("event"), eventIdBuffer, Buffer.from("pool")],
-//             program.programId
-//         )[0]; // Directly assign the PublicKey
-//         await program.methods.initializeEventPool().accounts({
-//             event,
-//             eventPool,
-//             payer: owner.publicKey,
-//             tokenMint: mint,
-//             systemProgram: anchor.web3.SystemProgram.programId,
-//             tokenProgram: TOKEN_PROGRAM_ID,
-//             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-//         }).signers([owner]).rpc();
-//         console.log("Event Pool initialized");
-
-//         // Initialize user bet - User initializes user bet ONCE in 'before'
-//         userBet = anchor.web3.PublicKey.findProgramAddressSync(
-//             [Buffer.from("user_bet"), user.publicKey.toBuffer(), eventIdBuffer],
-//             program.programId
-//         )[0]; // Directly assign
-//         await program.methods.initializeUserBet().accounts({
-//             userBet,
-//             event,
-//             user: user.publicKey,
-//             systemProgram: anchor.web3.SystemProgram.programId,
-//         }).signers([user]).rpc();
-//         console.log("User Bet initialized");
-
-
-//     });
-
-
-//     it("should place bet successfully", async () => {
-//         await program.methods
-//             .placeBet("outcome1", BET_AMOUNT)
-//             .accounts({
-//                 event,
-//                 userBet,
-//                 userTokenAccount,
-//                 eventPool,
-//                 user: user.publicKey,
-//                 tokenProgram: TOKEN_PROGRAM_ID,
-//             })
-//             .signers([user])
-//             .rpc();
-//         console.log("Bet placed");
-//             const eventPoolAccountAfterBet = await getAccount(provider.connection, eventPool);
-//     const eventPoolBalanceAfterBet = new anchor.BN(eventPoolAccountAfterBet.amount.toString());
-//     console.log("Event Pool Balance AFTER bet:", eventPoolBalanceAfterBet.toString());
-//         // Optionally, verify bet was placed correctly (e.g., fetch userBet account)
-//         const fetchedUserBet = await program.account.userBet.fetch(userBet);
-//         assert.isTrue(fetchedUserBet.amount.eq(BET_AMOUNT), "Bet amount should be updated in userBet account");
-//     });
-
-
-//     it("should resolve event successfully", async () => {
-//         // Fast forward time - simulate event ending after betting
-//         await provider.connection.confirmTransaction(
-//             await provider.connection.requestAirdrop(user.publicKey, anchor.web3.LAMPORTS_PER_SOL) // Airdrop to avoid possible rent issues during time increase
-//         );
-//         await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for clock to advance
-    
-//         const eventPoolAccountBeforeResolve = await getAccount(provider.connection, eventPool);
-//         const feePoolAccountBeforeResolve = await getAccount(provider.connection, feePoolTokenAccount); // Get Fee Pool ATA balance
-//         const initialEventPoolBalanceResolve = new anchor.BN(eventPoolAccountBeforeResolve.amount.toString());
-//         const initialFeePoolTokenAccountBalanceResolve = new anchor.BN(feePoolAccountBeforeResolve.amount.toString());
-    
-//         // Log account keys *before* calling resolveEvent
-//         console.log("=== Before resolveEvent ===");
-//         console.log("Event Account Key (Test):", event.toBase58());
-//         console.log("Event Pool Account Key (Test):", eventPool.toBase58());
-//         console.log("Fee Pool Token Account Key (Test):", feePoolTokenAccount.toBase58()); // Correct
-//         console.log("Program Authority Key (Test):", programAuthority.toBase58()); // ADDED
-//         console.log("Program State Key (Test):", programState.toBase58()); // ADDED
-    
-    
-//         await program.methods
-//             .resolveEvent("outcome1")
-//             .accounts({
-//                 programState,
-//                 event,
-//                 eventPool,
-//                 fee_pool_token_account: feePoolTokenAccount,
-//                 tokenMint: mint,
-//                 tokenProgram: TOKEN_PROGRAM_ID,
-//                 systemProgram: SystemProgram.programId,
-//                 rent: anchor.web3.SYSVAR_RENT_PUBKEY, 
-//             })
-//             .rpc();
-//         console.log("Event resolved");
-    
-//         // Get balances AFTER resolveEvent (include feePoolTokenAccount now)
-//         const eventPoolAccountAfterResolve = await getAccount(provider.connection, eventPool);
-//         const feePoolAccountAfterResolve = await getAccount(provider.connection, feePoolTokenAccount); // Get Fee Pool ATA balance
-//         const finalEventPoolBalanceResolve = new anchor.BN(eventPoolAccountAfterResolve.amount.toString());
-//         const finalFeePoolTokenAccountBalanceResolve = new anchor.BN(feePoolAccountAfterResolve.amount.toString());
-    
-    
-//         // Optionally, verify event resolution (e.g., fetch event account)
-//         const fetchedEvent = await program.account.event.fetch(event);
-//         assert.isTrue(fetchedEvent.resolved, "Event should be resolved");
-//         assert.equal(fetchedEvent.winningOutcome, "outcome1", "Winning outcome should be 'outcome1'");
-    
-//         // ++++++++ ADDED FEE TRANSFER ASSERTIONS ++++++++
-//         const feePercentageBasisPoints = 100; // As defined in initialize (1%)
-//         const expectedFee = initialEventPoolBalanceResolve.muln(feePercentageBasisPoints).divn(10000); // Calculate expected fee (1%)
-//         console.log("Initial Event Pool Balance (resolve):", initialEventPoolBalanceResolve.toString());
-//         console.log("Expected Fee:", expectedFee.toString());
-//         console.log("Fee Pool Balance BEFORE resolve:", initialFeePoolTokenAccountBalanceResolve.toString());
-//         console.log("Fee Pool Balance AFTER resolve:", finalFeePoolTokenAccountBalanceResolve.toString());
-//         console.log("Event Pool Balance BEFORE resolve:", initialEventPoolBalanceResolve.toString());
-//         console.log("Event Pool Balance AFTER resolve:", finalEventPoolBalanceResolve.toString());
-    
-    
-//         assert.isTrue(finalFeePoolTokenAccountBalanceResolve.eq(initialFeePoolTokenAccountBalanceResolve.add(expectedFee)), "Fee Pool Token Account balance should increase by fee amount");
-//         assert.isTrue(finalEventPoolBalanceResolve.eq(initialEventPoolBalanceResolve.sub(expectedFee)), "Event Pool balance should decrease by fee amount");
-//         // ++++++++ END ADDED FEE TRANSFER ASSERTIONS ++++++++
-//     });
-
-    
-// });
+  it("Withdraw fees", async () => {
+    const ownerTokenAccount = await getAssociatedTokenAddress(tokenMint, owner.publicKey);
+    const before = await getAccount(provider.connection, ownerTokenAccount);
+    const withdrawAmt = new anchor.BN(10000);
+    await program.methods
+      .withdrawFees(withdrawAmt)
+      .accounts({
+        programState: programStatePDA,
+        feePool: feePoolPDA,
+        ownerTokenAccount: ownerTokenAccount,
+        owner: owner.publicKey,
+        program_authority: programAuthority.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+    console.log("Fees withdrawn:", withdrawAmt.toString());
+    const after = await getAccount(provider.connection, ownerTokenAccount);
+    assert.isTrue(new anchor.BN(after.amount.toString()).gt(new anchor.BN(before.amount.toString())));
+  });
+});

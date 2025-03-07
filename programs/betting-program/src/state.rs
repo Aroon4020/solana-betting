@@ -19,10 +19,10 @@ impl ProgramState {
 pub struct Event {
     pub id: u64,
     pub description: String, // fixed max length at creation (e.g. 256 bytes)
-    pub outcomes: Vec<[u8; 32]>,          // fixed-size outcome hashes
-    pub winning_outcome: Option<[u8; 32]>,  // fixed-size hash for winner
-    pub start_time: u64,   // Changed from i64 to u64
-    pub deadline: u64,     // Changed from i64 to u64
+    pub outcomes: Vec<[u8; 20]>,          // fixed-size outcome strings (20 bytes each)
+    pub winning_outcome: Option<[u8; 20]>,  // fixed-size outcome string
+    pub start_time: u64,
+    pub deadline: u64,
     pub total_pool: u64,
     pub voucher_amount: u64,
     pub total_voucher_claimed: u64,
@@ -31,22 +31,18 @@ pub struct Event {
 }
 
 impl Event {
-    // For example, assume:
-    // id: 8, description:256, outcomes: 4+10*32, winning_outcome: 33, start_time:8, deadline:8,
-    // total_pool:8, voucher_amount:8, total_voucher_claimed:8, total_bets_by_outcome: 4+10*8, resolved:1.
-    // Adjusted using u64 for start_time and deadline (size remains 8 bytes each)
-    pub const LEN: usize = 8 + 256 + (4 + 10 * 32) + 33 + (8 + 8) + 8 + 8 + 8 + (4 + 10 * 8) + 1;
+    // Updated LEN: 8 + 256 + (4 + 10*20) + (1+20) + (8+8) + 8 + 8 + 8 + (4+10*8) + 1
+    pub const LEN: usize = 8 + 256 + (4 + 10 * 20) + 21 + 16 + 8 + 8 + 8 + (4 + 10 * 8) + 1;
 }
 
 #[account]
 pub struct UserBet {
     pub user: Pubkey,
     pub event_id: u64,
-    pub outcome: [u8; 32], // outcome stored as hash (default [0u8;32] if unset)
+    pub outcome: [u8; 20], // outcome stored as fixed-size 20-byte string
     pub amount: u64,
-    pub nonce: u64,
 }
 
 impl UserBet {
-    pub const LEN: usize = 8 + 32 + 8 + 32 + 8 + 8;
+    pub const LEN: usize = 8 + 32 + 8 + 20 + 8 + 8;
 }

@@ -18,8 +18,9 @@ pub enum EventBettingProtocolError {
     BettingClosed,
     #[msg("Invalid outcome")]
     InvalidOutcome,
-    #[msg("Event is still active")]
+    #[msg("Invalid winning outcome")]
     InvalidWinningOutcome,
+    #[msg("Event is still active")]
     EventStillActive,
     #[msg("Event already resolved")]
     EventAlreadyResolved,
@@ -49,4 +50,8 @@ pub enum EventBettingProtocolError {
     VouchedAmountZero,
     #[msg("Betting not started")]
     BettingNotStarted,
+    #[msg("The user token account is not the expected associated token account.")]
+    InvalidUserATA,
+    #[msg("The fee pool account is not the expected associated token account.")]
+    InvalidFeePoolATA,  // <-- New error variant
 }

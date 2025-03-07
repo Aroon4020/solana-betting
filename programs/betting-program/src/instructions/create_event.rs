@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::sysvar::clock::Clock;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
-use crate::utils::outcome_hasher::hash_outcome;  // Use the new utility
+use crate::utils::outcome_formatter::format_outcome;  // Updated: use outcome_formatter instead of outcome_hasher
 
 #[derive(Accounts)]
 pub struct CreateEvent<'info> {
@@ -41,8 +41,8 @@ pub fn create_event_handler(
     event.description = description.clone();
     event.start_time = start_time;
     event.deadline = deadline;
-    // Convert each outcome into a 32-byte hash and store using the new field 'outcomes'
-    event.outcomes = possible_outcomes.iter().map(|s| hash_outcome(s)).collect();
+    // Map outcomes using format_outcome to produce fixed-size 20-byte strings.
+    event.outcomes = possible_outcomes.iter().map(|s| format_outcome(s)).collect();
     event.winning_outcome = None;
     event.total_pool = 0;
     event.voucher_amount = voucher_amount;

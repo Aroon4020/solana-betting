@@ -1,1 +1,1 @@
-pub mod outcome_hasher;
+pub mod outcome_formatter;
