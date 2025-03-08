@@ -315,6 +315,153 @@ describe("EventBetting Program Tests", () => {
     assert.isTrue(userBetAccount.amount.eq(expectedTotal));
   });
 
+  it("Place bet without voucher with new user", async () => {
+        // Generate a new user keypair
+        let newUser = Keypair.generate();
+        // Airdrop SOL to the new user
+        await provider.connection.requestAirdrop(newUser.publicKey, 50 * LAMPORTS_PER_SOL);
+    
+        // Ensure new user's ATA exists and fund it
+        const newUserTokenAccount = await getAssociatedTokenAddress(tokenMint, newUser.publicKey);
+        try {
+          await getAccount(provider.connection, newUserTokenAccount);
+        } catch {
+          const ix = createAssociatedTokenAccountInstruction(
+            owner.publicKey,
+            newUserTokenAccount,
+            newUser.publicKey,
+            tokenMint
+          );
+          const tx = new Transaction().add(ix);
+          await provider.sendAndConfirm(tx, [owner]);
+        }
+        await mintTo(
+          provider.connection,
+          owner,
+          tokenMint,
+          newUserTokenAccount,
+          owner,
+          500000000
+        );
+    
+        const outcome = "Outcome 2"; // Bet on a different outcome
+        const betAmount = new anchor.BN(3000);
+        const voucherAmount = new anchor.BN(0);
+    
+        // Derive userBetPDA for the new user
+        const newUserBetPDA = await getAssociatedTokenAddress(
+          tokenMint, // This PDA derivation is incorrect, it should use USER_BET_SEED
+          newUser.publicKey
+        );
+        [userBetPDA] = await PublicKey.findProgramAddress(
+          [
+            Buffer.from(USER_BET_SEED),
+            newUser.publicKey.toBuffer(),
+            currentEventId.toArrayLike(Buffer, "le", 8)
+          ],
+          program.programId
+        );
+    
+    
+        await program.methods
+          .placeBet(outcome, betAmount, voucherAmount)
+          .accounts({
+            programState: programStatePDA,
+            adminSigner: programAuthority.publicKey,
+            event: eventPDA,
+            userBet: userBetPDA,
+            userTokenAccount: newUserTokenAccount,
+            eventPool: eventPoolPDA,
+            feePool: feePoolPDA,
+            user: newUser.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([newUser, programAuthority])
+          .rpc();
+        console.log("Bet placed without voucher by new user:", newUser.publicKey.toBase58());
+    
+        const newUserBetAccount = await program.account.userBet.fetch(userBetPDA);
+        assert.isTrue(newUserBetAccount.amount.eq(betAmount));
+     });
+
+    it("Place bet with voucher with new user", async () => {
+          // Generate another new user keypair
+          let anotherNewUser = Keypair.generate();
+          // Airdrop SOL to this new user
+          await provider.connection.requestAirdrop(anotherNewUser.publicKey, 50 * LAMPORTS_PER_SOL);
+      
+          // Ensure new user's ATA exists and fund it
+          const anotherUserTokenAccount = await getAssociatedTokenAddress(tokenMint, anotherNewUser.publicKey);
+          try {
+            await getAccount(provider.connection, anotherUserTokenAccount);
+          } catch {
+            const ix = createAssociatedTokenAccountInstruction(
+              owner.publicKey,
+              anotherUserTokenAccount,
+              anotherNewUser.publicKey,
+              tokenMint
+            );
+            const tx = new Transaction().add(ix);
+            await provider.sendAndConfirm(tx, [owner]);
+          }
+          await mintTo(
+            provider.connection,
+            owner,
+            tokenMint,
+            anotherUserTokenAccount,
+            owner,
+            500000000
+          );
+      
+          const outcome = "Outcome 2"; // Bet on Outcome 2
+          const betAmount = new anchor.BN(2500);
+          const voucherAmount = new anchor.BN(1500);
+      
+          // Derive userBetPDA for this another new user
+          [userBetPDA] = await PublicKey.findProgramAddress(
+            [
+              Buffer.from(USER_BET_SEED),
+              anotherNewUser.publicKey.toBuffer(),
+              currentEventId.toArrayLike(Buffer, "le", 8)
+            ],
+            program.programId
+          );
+      
+          // Fetch existing bet amount for this new user (should be zero or none)
+          let existingAmountAnotherUser = new anchor.BN(0);
+          try {
+            const existingBetAnotherUser = await program.account.userBet.fetch(userBetPDA);
+            existingAmountAnotherUser = existingBetAnotherUser.amount;
+          } catch (err) {
+            // No existing bet for this user, default to 0
+          }
+      
+      
+          await program.methods
+            .placeBet(outcome, betAmount, voucherAmount)
+            .accounts({
+              programState: programStatePDA,
+              adminSigner: programAuthority.publicKey,
+              event: eventPDA,
+              userBet: userBetPDA,
+              userTokenAccount: anotherUserTokenAccount,
+              eventPool: eventPoolPDA,
+              feePool: feePoolPDA,
+              user: anotherNewUser.publicKey,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([anotherNewUser, programAuthority])
+            .rpc();
+          console.log("Bet placed with voucher by new user:", anotherNewUser.publicKey.toBase58());
+      
+          const anotherUserBetAccount = await program.account.userBet.fetch(userBetPDA);
+          // Verify total bet amount for the new user, including voucher
+          const expectedTotalAnotherUser = existingAmountAnotherUser.add(betAmount).add(voucherAmount);
+          assert.isTrue(anotherUserBetAccount.amount.eq(expectedTotalAnotherUser));
+        });  
+
   it("Resolve event", async () => {
     // Fetch event account to get the new (shortened) deadline.
     let eventAccount = await program.account.event.fetch(eventPDA);
@@ -322,7 +469,7 @@ describe("EventBetting Program Tests", () => {
     if (currentTime < eventAccount.deadline) {
       const delay = (eventAccount.deadline - currentTime + 1) * 1000; // minimal wait time
       console.log("Waiting", delay, "ms for event deadline to pass");
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay+2000)); // Updated: add extra 2 seconds
     }
     await program.methods
       .resolveEvent("Outcome 1")
@@ -344,24 +491,42 @@ describe("EventBetting Program Tests", () => {
   });
 
   it("Claim winnings", async () => {
+    // --- Ensure we are using the correct event context ---
+    // Fetch the event account again to be absolutely sure we're using the correct one.
+    const eventAccountBeforeClaim = await program.account.event.fetch(eventPDA);
+    const claimEventId = eventAccountBeforeClaim.id;
+
+    // Derive userBetPDA again, ensuring we use the correct eventId
+    [userBetPDA] = await PublicKey.findProgramAddress(
+        [
+            Buffer.from(USER_BET_SEED),
+            user.publicKey.toBuffer(),
+            claimEventId.toArrayLike(Buffer, "le", 8) // Use fetched event ID
+        ],
+        program.programId
+    );
+    console.log("Claim Winnings - Event PDA:", eventPDA.toBase58()); // Log event PDA
+    console.log("Claim Winnings - UserBet PDA:", userBetPDA.toBase58()); // Log userBet PDA
+
+    // --- Claim Winnings Transaction ---
     const userTokenAccount = await getAssociatedTokenAddress(tokenMint, user.publicKey);
     const before = await getAccount(provider.connection, userTokenAccount);
     await program.methods
-      .claimWinnings()
-      .accounts({
-        event: eventPDA,
-        userBet: userBetPDA,
-        userTokenAccount: userTokenAccount,
-        eventPool: eventPoolPDA,
-        user: user.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([user])
-      .rpc();
+        .claimWinnings()
+        .accounts({
+            event: eventPDA, // Use the same eventPDA from event creation
+            userBet: userBetPDA, // Use the re-derived userBetPDA
+            userTokenAccount: userTokenAccount,
+            eventPool: eventPoolPDA, // Use the same eventPoolPDA from event creation
+            user: user.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
     console.log("Winnings claimed by user:", user.publicKey.toBase58());
     const after = await getAccount(provider.connection, userTokenAccount);
     assert.isTrue(new anchor.BN(after.amount.toString()).gt(new anchor.BN(before.amount.toString())));
-  });
+});
 
   it("Withdraw fees", async () => {
     const ownerTokenAccount = await getAssociatedTokenAddress(tokenMint, owner.publicKey);

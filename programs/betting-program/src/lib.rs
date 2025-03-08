@@ -5,9 +5,9 @@ mod error;
 mod state;
 mod constants;
 mod instructions;
-pub mod utils; // Expose utils module
+pub mod utils; 
 
-use instructions::*; // Re-export instructions modules
+use instructions::*; 
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -35,8 +35,8 @@ pub mod event_betting {
         create_event::create_event_handler(
             ctx,
             description,
-            start_time.try_into().unwrap(),  // Convert i64 to u64
-            deadline.try_into().unwrap(),    // Convert i64 to u64
+            start_time.try_into().unwrap(),  
+            deadline.try_into().unwrap(),    
             possible_outcomes,
             voucher_amount,
         )
@@ -93,7 +93,6 @@ pub mod event_betting {
     }
 
     pub fn close_user_bet(ctx: Context<CloseUserBet>) -> Result<()> {
-        // Call the close_user_bet_handler exposed in the module.
         close_user_bet_handler(ctx)
     }
 }

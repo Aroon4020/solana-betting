@@ -15,22 +15,25 @@ pub fn update_config_handler(
     new_signer: Option<Pubkey>,
     new_fee_percentage: Option<u16>,
 ) -> Result<()> {
-    let ps = &mut ctx.accounts.program_state;
+    let program_state = &mut ctx.accounts.program_state;
+
     if let Some(owner) = new_owner {
-        ps.owner = owner;
+        program_state.owner = owner;
     }
     if let Some(signer) = new_signer {
-        ps.signer = signer;
+        program_state.signer = signer;
     }
     if let Some(fee) = new_fee_percentage {
-        // Convert the fee into u64 to store in state.
-        ps.fee_percentage = fee as u64;
+        // Store fee percentage as u64 in state.
+        program_state.fee_percentage = fee as u64;
     }
+
     emit!(ConfigUpdated {
-        new_owner: ps.owner,
-        new_signer: ps.signer,
-        new_fee_percentage: ps.fee_percentage as u16, // Cast back to u16 for the event.
+        new_owner: program_state.owner,
+        new_signer: program_state.signer,
+        new_fee_percentage: program_state.fee_percentage as u16, // Cast back to u16 for event.
     });
+
     Ok(())
 }
 

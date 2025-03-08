@@ -25,7 +25,6 @@ pub struct AddVoucherFunds<'info> {
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
-    #[account(mut)]
     pub fund_source: Signer<'info>,
 
     pub token_mint: Account<'info, Mint>,
@@ -33,29 +32,29 @@ pub struct AddVoucherFunds<'info> {
 }
 
 pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
-    // Require non-zero amount.
+    // Ensure amount is not zero.
     require!(amount > 0, EventBettingProtocolError::BetAmountZero);
 
-    // Validate that the provided sender's ATA is correct.
+    // Validate user's Associated Token Account (ATA).
     let expected_sender_ata = get_associated_token_address(&ctx.accounts.fund_source.key(), &ctx.accounts.token_mint.key());
     require!(
         *ctx.accounts.user_token_account.to_account_info().key == expected_sender_ata,
         EventBettingProtocolError::InvalidUserATA
     );
 
-    // Validate fee pool PDA.
+    // Validate Fee Pool PDA.
     let (expected_fee_pool, _bump) = Pubkey::find_program_address(&[BETTING_STATE_SEED, FEE_POOL_SEED], ctx.program_id);
     require!(
         ctx.accounts.fee_pool.key() == expected_fee_pool,
         EventBettingProtocolError::InvalidFeePoolATA
     );
 
-    // Update accumulated fees in program state.
+    // Update accumulated fees.
     ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
         .checked_add(amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
-    // Transfer tokens from fund source to fee pool.
+    // Transfer funds to the fee pool.
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),

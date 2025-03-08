@@ -17,10 +17,10 @@ pub struct InitializeEventPool<'info> {
             b"pool"
         ],
         bump,
-        token::mint = token_mint, // Initialize event_pool as TokenAccount with token_mint
-        token::authority = event    // Event PDA as authority
+        token::mint = token_mint, 
+        token::authority = event  
     )]
-    pub event_pool: Account<'info, TokenAccount>, // Initialize event_pool as TokenAccount
+    pub event_pool: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub payer: Signer<'info>,

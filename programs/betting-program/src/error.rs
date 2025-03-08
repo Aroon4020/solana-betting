@@ -8,6 +8,8 @@ pub enum EventBettingProtocolError {
     InvalidSignature,
     #[msg("Deadline must be in the future")]
     DeadlineInThePast,
+    #[msg("Start time must be in the future")]
+    StartTimeInThePast,
     #[msg("No outcomes specified")]
     NoOutcomesSpecified,
     #[msg("Insufficient protocol fees")]
@@ -30,8 +32,6 @@ pub enum EventBettingProtocolError {
     NoWinningsToClaim,
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
-    #[msg("Invalid nonce")]
-    InvalidNonce,
     #[msg("Voucher amount exceeds limit")]
     VoucherAmountExceedsLimit,
     #[msg("WithdrawAmountZero")]

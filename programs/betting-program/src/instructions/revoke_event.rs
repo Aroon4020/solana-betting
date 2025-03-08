@@ -9,11 +9,11 @@ pub struct RevokeEvent<'info> {
     pub program_state: Account<'info, ProgramState>,
     #[account(mut)]
     pub event: Account<'info, Event>,
-    pub owner: Signer<'info>, // Mark owner as mut for consistency
+    pub owner: Signer<'info>,
 }
 
 pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
-    // Owner check: Ensure the caller is the program owner.
+    // Verify owner authorization.
     require!(
         ctx.accounts.program_state.owner == ctx.accounts.owner.key(),
         EventBettingProtocolError::Unauthorized
@@ -21,34 +21,32 @@ pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
 
     let event = &mut ctx.accounts.event;
     let program_state = &mut ctx.accounts.program_state;
-    let clock = Clock::get()?;
-    let current_time: u64 = clock.unix_timestamp.try_into().unwrap(); // Convert i64 to u64
+    let current_time: u64 = Clock::get()?.unix_timestamp.try_into().unwrap();
 
-    // Check if event hasn't started
+    // Ensure event has not started.
     require!(
         current_time < event.start_time,
         EventBettingProtocolError::EventCannotBeEnded
     );
 
-    // Check no bets placed
+    // Ensure no bets have been placed.
     require!(
         event.total_pool == 0,
         EventBettingProtocolError::EventHasBets
     );
 
-    // Update active vouchers amount with checked arithmetic
+    // Adjust active vouchers amount if vouchers were allocated.
     if event.voucher_amount > 0 {
-        program_state.active_vouchers_amount = program_state
-            .active_vouchers_amount
+        program_state.active_vouchers_amount = program_state.active_vouchers_amount
             .checked_sub(event.voucher_amount)
             .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
     }
 
-    // Clear event data
+    // Mark event as resolved and clear voucher amount.
     event.voucher_amount = 0;
     event.resolved = true; // Mark as resolved to prevent further interactions
 
-    // Emit event
+    // Emit Event Revoked event.
     emit!(EventRevoked {
         event_id: event.id,
     });

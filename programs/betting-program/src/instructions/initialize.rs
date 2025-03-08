@@ -46,7 +46,7 @@ pub fn handler(
         next_event_id: 0,
         accumulated_fees: 0,
         active_vouchers_amount: 0,
-        token_mint, 
+        token_mint,
     });
     Ok(())
 }
