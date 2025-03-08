@@ -53,5 +53,5 @@ pub enum EventBettingProtocolError {
     #[msg("The user token account is not the expected associated token account.")]
     InvalidUserATA,
     #[msg("The fee pool account is not the expected associated token account.")]
-    InvalidFeePoolATA,  // <-- New error variant
+    InvalidFeePoolATA,  
 }
