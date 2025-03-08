@@ -1,16 +1,27 @@
 use anchor_lang::prelude::*;
-use crate::state::*;
-use crate::error::EventBettingProtocolError;
+use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct UpdateVoucherAmount<'info> {
-    #[account(mut, signer)]
+    // Remove mut from signer since we're not modifying it
+    #[account(signer)]
     pub owner: Signer<'info>,
 
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    // Add proper PDA validation
+    #[account(
+        mut,
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
 
-    #[account(mut)]
+    // Add proper PDA validation for event
+    #[account(
+        mut,
+        seeds = [EVENT_SEED, &event.id.to_le_bytes()],
+        bump
+    )]
     pub event: Account<'info, Event>,
 }
 

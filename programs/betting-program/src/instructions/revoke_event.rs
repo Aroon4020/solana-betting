@@ -1,17 +1,27 @@
 use anchor_lang::prelude::*;
 use solana_program::sysvar::clock::Clock;
 use std::convert::TryInto;
-use crate::{state::*, error::EventBettingProtocolError};
+use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct RevokeEvent<'info> {
-    #[account(mut, signer)]
+    // Remove mut as we don't modify the signer
+    #[account(signer)]
     pub owner: Signer<'info>,
 
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    #[account(
+        mut, 
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [EVENT_SEED, &event.id.to_le_bytes()],
+        bump
+    )]
     pub event: Account<'info, Event>,
 }
 

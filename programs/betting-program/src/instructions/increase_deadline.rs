@@ -1,13 +1,26 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::error::EventBettingProtocolError;
+use crate::constants::*; // Add constants import
 
 #[derive(Accounts)]
 pub struct IncreaseDeadline<'info> {
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    #[account(
+        mut, 
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
-    #[account(mut)]
+    
+    #[account(
+        mut,
+        seeds = [EVENT_SEED, &event.id.to_le_bytes()],
+        bump
+    )]
     pub event: Account<'info, Event>,
+    
+    // Already without mut, which is correct
     pub owner: Signer<'info>,
 }
 

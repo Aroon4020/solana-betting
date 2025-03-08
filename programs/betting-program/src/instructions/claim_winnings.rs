@@ -5,10 +5,15 @@ use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct ClaimWinnings<'info> {
-    #[account(mut, signer)]
+    // Remove 'mut' since we don't modify the user account data
+    #[account(signer)]
     pub user: Signer<'info>,
 
-    #[account(mut, token::mint = user_token_account.mint)]
+    // Add program_state to the context and properly validate token mint
+    #[account(seeds = [BETTING_STATE_SEED], bump)]
+    pub program_state: Account<'info, ProgramState>,
+
+    #[account(mut, token::mint = program_state.token_mint)]
     pub user_token_account: Account<'info, TokenAccount>,
 
     #[account(mut, seeds = [EVENT_SEED, &event.id.to_le_bytes()], bump)]
@@ -25,7 +30,7 @@ pub struct ClaimWinnings<'info> {
         mut,
         seeds = [EVENT_SEED, &event.id.to_le_bytes(), b"pool"],
         bump,
-        token::mint = user_token_account.mint, 
+        token::mint = program_state.token_mint, 
         token::authority = event
     )]
     pub event_pool: Account<'info, TokenAccount>,
@@ -34,7 +39,8 @@ pub struct ClaimWinnings<'info> {
 }
 
 pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
-    let expected_ata = get_associated_token_address(&ctx.accounts.user.key(), &ctx.accounts.event_pool.mint);
+    // Verify user's ATA with proper mint validation
+    let expected_ata = get_associated_token_address(&ctx.accounts.user.key(), &ctx.accounts.program_state.token_mint);
     require!(
         *ctx.accounts.user_token_account.to_account_info().key == expected_ata,
         EventBettingProtocolError::InvalidUserATA

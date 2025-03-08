@@ -1,11 +1,18 @@
 use anchor_lang::prelude::*;
-use crate::{state::ProgramState, error::EventBettingProtocolError};
+use crate::{state::ProgramState, error::EventBettingProtocolError, constants::*}; // Add constants import
 
 #[derive(Accounts)]
 pub struct UpdateConfig<'info> {
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    #[account(
+        mut, 
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
-    #[account(mut)]
+    
+    // Remove mut as we don't modify the signer
+    #[account(signer)]
     pub owner: Signer<'info>,
 }
 

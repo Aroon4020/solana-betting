@@ -6,6 +6,7 @@ use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct AddVoucherFunds<'info> {
+    #[account(signer)]
     pub fund_source: Signer<'info>,
 
     #[account(mut, seeds = [BETTING_STATE_SEED], bump)]

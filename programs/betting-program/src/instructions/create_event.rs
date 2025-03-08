@@ -9,7 +9,12 @@ pub struct CreateEvent<'info> {
     #[account(mut, signer)]
     pub owner: Signer<'info>,
 
-    #[account(mut, has_one = owner @ EventBettingProtocolError::Unauthorized)]
+    #[account(
+        mut, 
+        seeds = [BETTING_STATE_SEED],
+        bump,
+        has_one = owner @ EventBettingProtocolError::Unauthorized
+    )]
     pub program_state: Account<'info, ProgramState>,
 
     #[account(
@@ -36,7 +41,6 @@ pub struct CreateEvent<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn create_event_handler(
@@ -47,9 +51,7 @@ pub fn create_event_handler(
     possible_outcomes: Vec<String>,
     voucher_amount: u64,
 ) -> Result<()> {
-    //let current_timestamp: u64 = Clock::get()?.try_into().unwrap();
     let current_timestamp: u64 = Clock::get()?.unix_timestamp as u64;
-
     require!(deadline > start_time, EventBettingProtocolError::DeadlineInThePast);
     require!(start_time > current_timestamp, EventBettingProtocolError::StartTimeInThePast);
     require!(!possible_outcomes.is_empty(), EventBettingProtocolError::NoOutcomesSpecified);

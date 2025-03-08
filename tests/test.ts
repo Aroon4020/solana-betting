@@ -183,14 +183,14 @@ describe("EventBetting Program Tests", () => {
     const eventAccount = await program.account.event.fetch(eventPDA);
     assert.equal(eventAccount.description, eventDescription);
 
-    [eventPoolPDA] = await PublicKey.findProgramAddress(
-      [
-        Buffer.from(EVENT_SEED),
-        currentEventId.toArrayLike(Buffer, "le", 8),
-        Buffer.from("pool")
-      ],
-      program.programId
-    );
+    // [eventPoolPDA] = await PublicKey.findProgramAddress(
+    //   [
+    //     Buffer.from(EVENT_SEED),
+    //     currentEventId.toArrayLike(Buffer, "le", 8),
+    //     Buffer.from("pool")
+    //   ],
+    //   program.programId
+    // );
     // await program.methods
     //   .initializeEventPool()
     //   .accounts({
