@@ -50,8 +50,12 @@ pub enum EventBettingProtocolError {
     VouchedAmountZero,
     #[msg("Betting not started")]
     BettingNotStarted,
+    #[msg("The provided token mint is invalid.")]
+    InvalidTokenMint,
     #[msg("The user token account is not the expected associated token account.")]
     InvalidUserATA,
     #[msg("The fee pool account is not the expected associated token account.")]
-    InvalidFeePoolATA,  
+    InvalidFeePoolATA,
+    #[msg("The event pool account is not the expected associated token account.")]
+    InvalidEventPoolATA,
 }

@@ -18,9 +18,9 @@ impl ProgramState {
 #[account]
 pub struct Event {
     pub id: u64,
-    pub description: String, // fixed max length at creation (e.g. 256 bytes)
-    pub outcomes: Vec<[u8; 20]>,          // fixed-size outcome strings (20 bytes each)
-    pub winning_outcome: Option<[u8; 20]>,  // fixed-size outcome string
+    pub description: String, 
+    pub outcomes: Vec<String>,          
+    pub winning_outcome: Option<String>,  
     pub start_time: u64,
     pub deadline: u64,
     pub total_pool: u64,
@@ -31,15 +31,14 @@ pub struct Event {
 }
 
 impl Event {
-    // Updated LEN: 8 + 256 + (4 + 10*20) + (1+20) + (8+8) + 8 + 8 + 8 + (4+10*8) + 1
-    pub const LEN: usize = 8 + 256 + (4 + 10 * 20) + 21 + 16 + 8 + 8 + 8 + (4 + 10 * 8) + 1;
+    pub const LEN: usize = 8 + 8 + 256 + (4 + 10 * (4 + 20)) + (1 + (4 + 20)) + 8 + 8 + 8 + (4 + 10 * 8) + 1;
 }
 
 #[account]
 pub struct UserBet {
     pub user: Pubkey,
     pub event_id: u64,
-    pub outcome: [u8; 20], // outcome stored as fixed-size 20-byte string
+    pub outcome: String,
     pub amount: u64,
 }
 

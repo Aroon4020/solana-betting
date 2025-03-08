@@ -5,7 +5,6 @@ mod error;
 mod state;
 mod constants;
 mod instructions;
-pub mod utils; 
 
 use instructions::*; 
 
@@ -86,10 +85,6 @@ pub mod event_betting {
 
     pub fn add_voucher_funds(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
         add_voucher_funds::add_voucher_funds_handler(ctx, amount)
-    }
-
-    pub fn initialize_event_pool(ctx: Context<InitializeEventPool>) -> Result<()> {
-        initialize_event_pool::initialize_event_pool_handler(ctx)
     }
 
     pub fn close_user_bet(ctx: Context<CloseUserBet>) -> Result<()> {

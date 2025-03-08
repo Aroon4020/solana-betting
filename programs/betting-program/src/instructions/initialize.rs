@@ -5,6 +5,9 @@ use crate::{state::*, constants::*};
 #[derive(Accounts)]
 #[instruction(fee_percentage: u64, signer: Pubkey, token_mint: Pubkey)]
 pub struct Initialize<'info> {
+    #[account(mut, signer)]
+    pub owner: Signer<'info>,
+
     #[account(
         init,
         payer = owner,
@@ -24,13 +27,9 @@ pub struct Initialize<'info> {
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
-    #[account(mut)]
-    pub owner: Signer<'info>,
-
     pub token_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn handler(

@@ -9,7 +9,6 @@ pub mod revoke_event;
 pub mod increase_deadline;
 pub mod update_config;
 pub mod add_voucher_funds;
-pub mod initialize_event_pool;
 pub mod close_user_bet;  
 
 pub use initialize::*;
@@ -23,5 +22,4 @@ pub use revoke_event::*;
 pub use increase_deadline::*;
 pub use update_config::*;
 pub use add_voucher_funds::*;
-pub use initialize_event_pool::*;
 pub use close_user_bet::*;

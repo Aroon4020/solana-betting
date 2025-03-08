@@ -17,50 +17,43 @@ pub struct WithdrawFees<'info> {
         mut,
         seeds = [BETTING_STATE_SEED, FEE_POOL_SEED],
         bump,
-        token::mint = owner_token_account.mint,
+        token::mint = program_state.token_mint,
     )]
     pub fee_pool: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(mut, token::mint = program_state.token_mint)]
     pub owner_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(signer)]
     pub owner: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>, // System program is used by anchor for account operations, keep it.
+    pub system_program: Program<'info, System>,
 }
 
 pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
-    // Ensure withdraw amount is greater than zero.
     require!(amount > 0, EventBettingProtocolError::WithdrawAmountZero);
-
     let program_state = &mut ctx.accounts.program_state;
 
-    // Validate owner's associated token account (ATA).
     let expected_owner_ata = get_associated_token_address(&ctx.accounts.owner.key(), &ctx.accounts.owner_token_account.mint);
     require!(
         *ctx.accounts.owner_token_account.to_account_info().key == expected_owner_ata,
         EventBettingProtocolError::InvalidUserATA
     );
 
-    // Validate fee pool PDA.
     let (expected_fee_pool, _bump) = Pubkey::find_program_address(&[BETTING_STATE_SEED, FEE_POOL_SEED], ctx.program_id);
     require!(
         ctx.accounts.fee_pool.key() == expected_fee_pool,
         EventBettingProtocolError::InvalidFeePoolATA
     );
 
-    // Calculate max withdrawable amount, considering active vouchers.
     let max_withdrawable = program_state.accumulated_fees.saturating_sub(program_state.active_vouchers_amount);
     let withdraw_amount = if amount > max_withdrawable { max_withdrawable } else { amount };
 
-    // Update accumulated fees, using checked subtraction to prevent underflow (though saturating_sub is used above for max_withdrawable).
     program_state.accumulated_fees = program_state.accumulated_fees
         .checked_sub(withdraw_amount)
         .ok_or(EventBettingProtocolError::InsufficientFees)?;
 
-    // Transfer fees to the owner's token account.
     token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -74,7 +67,6 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
         withdraw_amount,
     )?;
 
-    // Emit Fees Withdrawn event.
     emit!(FeesWithdrawn {
         amount: withdraw_amount,
     });

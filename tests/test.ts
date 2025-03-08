@@ -153,6 +153,14 @@ describe("EventBetting Program Tests", () => {
       ],
       program.programId
     );
+    [eventPoolPDA] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from(EVENT_SEED),
+        currentEventId.toArrayLike(Buffer, "le", 8),
+        Buffer.from("pool")
+      ],
+      program.programId
+    );
     await program.methods
       .createEvent(
         eventDescription,
@@ -165,6 +173,8 @@ describe("EventBetting Program Tests", () => {
         programState: programStatePDA,
         event: eventPDA,
         owner: owner.publicKey,
+        tokenMint: tokenMint,
+        eventPool: eventPoolPDA,
         systemProgram: SystemProgram.programId,
       })
       .signers([owner])
@@ -181,20 +191,20 @@ describe("EventBetting Program Tests", () => {
       ],
       program.programId
     );
-    await program.methods
-      .initializeEventPool()
-      .accounts({
-        event: eventPDA,
-        eventPool: eventPoolPDA,
-        payer: owner.publicKey,
-        tokenMint: tokenMint,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      })
-      .signers([owner])
-      .rpc();
-    console.log("Event pool initialized:", eventPoolPDA.toBase58());
+    // await program.methods
+    //   .initializeEventPool()
+    //   .accounts({
+    //     event: eventPDA,
+    //     eventPool: eventPoolPDA,
+    //     payer: owner.publicKey,
+    //     tokenMint: tokenMint,
+    //     systemProgram: SystemProgram.programId,
+    //     tokenProgram: TOKEN_PROGRAM_ID,
+    //     rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    //   })
+    //   .signers([owner])
+    //   .rpc();
+    // console.log("Event pool initialized:", eventPoolPDA.toBase58());
   });
 
   it("Place bet without voucher", async () => {
@@ -531,7 +541,7 @@ describe("EventBetting Program Tests", () => {
   it("Withdraw fees", async () => {
     const ownerTokenAccount = await getAssociatedTokenAddress(tokenMint, owner.publicKey);
     const before = await getAccount(provider.connection, ownerTokenAccount);
-    const withdrawAmt = new anchor.BN(10000);
+    const withdrawAmt = new anchor.BN(100000);
     await program.methods
       .withdrawFees(withdrawAmt)
       .accounts({
