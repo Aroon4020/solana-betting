@@ -26,11 +26,6 @@ pub struct RevokeEvent<'info> {
 }
 
 pub fn revoke_event_handler(ctx: Context<RevokeEvent>) -> Result<()> {
-    require!(
-        ctx.accounts.program_state.owner == ctx.accounts.owner.key(),
-        EventBettingProtocolError::Unauthorized
-    );
-
     let event = &mut ctx.accounts.event;
     let program_state = &mut ctx.accounts.program_state;
     let current_time: u64 = Clock::get()?.unix_timestamp.try_into().unwrap();

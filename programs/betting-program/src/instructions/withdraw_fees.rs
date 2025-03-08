@@ -48,7 +48,13 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
     );
 
     let max_withdrawable = program_state.accumulated_fees.saturating_sub(program_state.active_vouchers_amount);
-    let withdraw_amount = if amount > max_withdrawable { max_withdrawable } else { amount };
+    let withdraw_amount = amount;
+    
+    // Instead of silently adjusting, return an error if requested amount is too high
+    require!(
+        withdraw_amount <= max_withdrawable,
+        EventBettingProtocolError::InsufficientFees
+    );
 
     program_state.accumulated_fees = program_state.accumulated_fees
         .checked_sub(withdraw_amount)

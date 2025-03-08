@@ -117,6 +117,12 @@ pub fn place_bet_handler(
 
     if vouched_amount > 0 {
         require!(ctx.accounts.admin_signer.is_some(), EventBettingProtocolError::InvalidSignature);
+        
+        // Fix: Use as_ref() to borrow the Option before unwrapping
+        require!(
+            ctx.accounts.admin_signer.as_ref().unwrap().key() == ctx.accounts.program_state.signer,
+            EventBettingProtocolError::InvalidSignature
+        );
 
         let program_state_bump = ctx.bumps.program_state;
         let seeds = &[BETTING_STATE_SEED, &[program_state_bump]];

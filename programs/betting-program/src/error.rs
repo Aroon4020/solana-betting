@@ -58,4 +58,6 @@ pub enum EventBettingProtocolError {
     InvalidFeePoolATA,
     #[msg("The event pool account is not the expected associated token account.")]
     InvalidEventPoolATA,
+    #[msg("Cannot close bet with unclaimed winnings")]
+    UnclaimedWinnings,
 }

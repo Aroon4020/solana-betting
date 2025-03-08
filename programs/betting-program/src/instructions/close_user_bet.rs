@@ -26,10 +26,10 @@ pub struct CloseUserBet<'info> {
 }
 
 pub fn close_user_bet_handler(ctx: Context<CloseUserBet>) -> Result<()> {
-    // Validate that the user bet has no unclaimed amount
+    // Validate that the user bet has no unclaimed amount with proper error
     require!(
         ctx.accounts.user_bet.amount == 0, 
-        EventBettingProtocolError::InvalidOutcome
+        EventBettingProtocolError::NoWinningsToClaim // Replace InvalidOutcome with more appropriate error
     );
     
     // Since we use `close = user` in the account validation, 
