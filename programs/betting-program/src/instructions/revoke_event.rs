@@ -5,7 +5,6 @@ use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct RevokeEvent<'info> {
-    // Remove mut as we don't modify the signer
     #[account(signer)]
     pub owner: Signer<'info>,
 

@@ -4,8 +4,14 @@ use solana_program::sysvar::clock::Clock;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
+#[instruction(
+    description: String,
+    start_time: u64,
+    deadline: u64,
+    possible_outcomes: Vec<String>,
+    voucher_amount: u64
+)]
 pub struct CreateEvent<'info> {
-    // Signer first.
     #[account(mut, signer)]
     pub owner: Signer<'info>,
 
@@ -20,7 +26,19 @@ pub struct CreateEvent<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + Event::LEN,
+        // Calculate space dynamically based on input parameters
+        space = 8 + // account discriminator
+               8 + // id: u64
+               4 + description.len() + // description: String (4 bytes for length + string bytes)
+               4 + possible_outcomes.iter().fold(0, |acc, outcome| acc + 4 + outcome.len()) + // outcomes: Vec<String>
+               1 + 4 + 20 + // winning_outcome: Option<String> (1 for Option variant + max 24 bytes for String)
+               8 + // start_time: u64
+               8 + // deadline: u64
+               8 + // total_pool: u64
+               8 + // voucher_amount: u64
+               8 + // total_voucher_claimed: u64
+               4 + possible_outcomes.len() * 8 + // total_bets_by_outcome: Vec<u64> (4 + 8 bytes per outcome)
+               1, // resolved: bool
         seeds = [EVENT_SEED, &program_state.next_event_id.to_le_bytes()],
         bump
     )]
@@ -58,6 +76,17 @@ pub fn create_event_handler(
 
     let program_state = &mut ctx.accounts.program_state;
     let event = &mut ctx.accounts.event;
+
+    if voucher_amount > 0 {
+        let new_active_vouchers = program_state.active_vouchers_amount
+            .checked_add(voucher_amount)
+            .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+            
+        require!(
+            program_state.accumulated_fees >= new_active_vouchers,
+            EventBettingProtocolError::InsufficientProtocolFees
+        );
+    }
 
     event.id = program_state.next_event_id;
     event.resolved = false;

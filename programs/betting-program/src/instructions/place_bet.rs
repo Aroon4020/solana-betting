@@ -10,8 +10,7 @@ pub struct PlaceBet<'info> {
     #[account(mut, seeds = [BETTING_STATE_SEED], bump)]
     pub program_state: Account<'info, ProgramState>,
 
-    /// CHECK: Admin signature is only required when voucher amount is greater than zero.
-    pub admin_signer: Option<Signer<'info>>,
+    pub admin_signer: Signer<'info>,
 
     #[account(mut, seeds = [EVENT_SEED, &event.id.to_le_bytes()], bump)]
     pub event: Account<'info, Event>,
@@ -73,11 +72,11 @@ pub fn place_bet_handler(
     );
     require!(
         ctx.accounts.event_pool.key() == expected_event_pool,
-        EventBettingProtocolError::InvalidEventPoolATA
+        EventBettingProtocolError::InvalidFeePoolATA
     );
     require!(
         ctx.accounts.event_pool.mint == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidEventPoolATA
+        EventBettingProtocolError::InvalidFeePoolATA
     );
 
     let (expected_fee_pool, _bump) = Pubkey::find_program_address(
@@ -97,7 +96,6 @@ pub fn place_bet_handler(
     let user_bet = &mut ctx.accounts.user_bet;
     let clock: u64 = Clock::get()?.unix_timestamp as u64;
 
-
     require!(clock >= event.start_time, EventBettingProtocolError::BettingNotStarted);
     require!(clock < event.deadline, EventBettingProtocolError::BettingClosed);
 
@@ -116,11 +114,8 @@ pub fn place_bet_handler(
     }
 
     if vouched_amount > 0 {
-        require!(ctx.accounts.admin_signer.is_some(), EventBettingProtocolError::InvalidSignature);
-        
-        // Fix: Use as_ref() to borrow the Option before unwrapping
         require!(
-            ctx.accounts.admin_signer.as_ref().unwrap().key() == ctx.accounts.program_state.signer,
+            ctx.accounts.admin_signer.key() == ctx.accounts.program_state.signer,
             EventBettingProtocolError::InvalidSignature
         );
 
@@ -142,9 +137,6 @@ pub fn place_bet_handler(
         )?;
 
         ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
-            .checked_sub(vouched_amount)
-            .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
-        ctx.accounts.program_state.active_vouchers_amount = ctx.accounts.program_state.active_vouchers_amount
             .checked_sub(vouched_amount)
             .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
         event.total_voucher_claimed = event.total_voucher_claimed

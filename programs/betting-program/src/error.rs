@@ -2,62 +2,48 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum EventBettingProtocolError {
-    #[msg("Unauthorized")]
-    Unauthorized,
-    #[msg("Invalid Ed25519 signature")]
-    InvalidSignature,
-    #[msg("Deadline must be in the future")]
+    #[msg("Deadline must be after the start time.")]
     DeadlineInThePast,
-    #[msg("Start time must be in the future")]
+    #[msg("Start time must be in the future.")]
     StartTimeInThePast,
-    #[msg("No outcomes specified")]
+    #[msg("No outcomes were specified for the event.")]
     NoOutcomesSpecified,
-    #[msg("Insufficient protocol fees")]
-    InsufficientProtocolFees,
-    #[msg("Bet amount must be greater than zero")]
-    BetAmountZero,
-    #[msg("Betting is closed")]
-    BettingClosed,
-    #[msg("Invalid outcome")]
-    InvalidOutcome,
-    #[msg("Invalid winning outcome")]
-    InvalidWinningOutcome,
-    #[msg("Event is still active")]
-    EventStillActive,
-    #[msg("Event already resolved")]
-    EventAlreadyResolved,
-    #[msg("Event not resolved yet")]
-    EventNotResolvedYet,
-    #[msg("No winnings to claim")]
-    NoWinningsToClaim,
-    #[msg("Arithmetic overflow")]
+    #[msg("Arithmetic operation overflowed.")]
     ArithmeticOverflow,
-    #[msg("Voucher amount exceeds limit")]
-    VoucherAmountExceedsLimit,
-    #[msg("WithdrawAmountZero")]
-    WithdrawAmountZero,
-    #[msg("Insufficient fees for withdrawal")]
-    InsufficientFees,
-    #[msg("Voucher update not allowed after resolution")]
-    VoucherUpdateNotAllowed,
-    #[msg("Insufficient voucher amount")]
-    InsufficientVoucherAmount,
-    #[msg("Event cannot be ended")]
-    EventCannotBeEnded,
-    #[msg("Event has active bets")]
-    EventHasBets,
-    #[msg("Vouched amount cannot be zero")]
-    VouchedAmountZero,
-    #[msg("Betting not started")]
-    BettingNotStarted,
-    #[msg("The provided token mint is invalid.")]
+    #[msg("Insufficient protocol fees for voucher allocation.")]
+    InsufficientProtocolFees,
+    #[msg("Unauthorized access.")]
+    Unauthorized,
+    #[msg("Bet amount must be greater than zero.")]
+    BetAmountZero,
+    #[msg("Token mint does not match the program state token mint.")]
     InvalidTokenMint,
-    #[msg("The user token account is not the expected associated token account.")]
+    #[msg("User token account is not the expected associated token account.")]
     InvalidUserATA,
-    #[msg("The fee pool account is not the expected associated token account.")]
+    #[msg("Fee pool account is invalid.")]
     InvalidFeePoolATA,
-    #[msg("The event pool account is not the expected associated token account.")]
-    InvalidEventPoolATA,
-    #[msg("Cannot close bet with unclaimed winnings")]
-    UnclaimedWinnings,
+    #[msg("Insufficient fees available.")]
+    InsufficientFees,
+    #[msg("Event cannot be ended as it has already started or resolved.")]
+    EventCannotBeEnded,
+    #[msg("Event already has bets placed.")]
+    EventHasBets,
+    #[msg("Event is still active and cannot be resolved.")]
+    EventStillActive,
+    #[msg("Event has already been resolved.")]
+    EventAlreadyResolved,
+    #[msg("Betting has not started yet.")]
+    BettingNotStarted,
+    #[msg("Betting is closed.")]
+    BettingClosed,
+    #[msg("Invalid outcome specified.")]
+    InvalidOutcome,
+    #[msg("Invalid admin signature provided.")]
+    InvalidSignature,
+    #[msg("Voucher amount cannot be updated for a resolved event.")]
+    VoucherUpdateNotAllowed,
+    #[msg("New voucher amount is less than already claimed vouchers.")]
+    InsufficientVoucherAmount,
+    #[msg("Invalid winning outcome specified.")]
+    InvalidWinningOutcome,
 }

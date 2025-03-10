@@ -359,10 +359,6 @@ describe("EventBetting Program Tests", () => {
         const voucherAmount = new anchor.BN(0);
     
         // Derive userBetPDA for the new user
-        const newUserBetPDA = await getAssociatedTokenAddress(
-          tokenMint, // This PDA derivation is incorrect, it should use USER_BET_SEED
-          newUser.publicKey
-        );
         [userBetPDA] = await PublicKey.findProgramAddress(
           [
             Buffer.from(USER_BET_SEED),
@@ -541,7 +537,15 @@ describe("EventBetting Program Tests", () => {
   it("Withdraw fees", async () => {
     const ownerTokenAccount = await getAssociatedTokenAddress(tokenMint, owner.publicKey);
     const before = await getAccount(provider.connection, ownerTokenAccount);
-    const withdrawAmt = new anchor.BN(100000);
+    
+    // Get current program state to determine available fees
+    const programState = await program.account.programState.fetch(programStatePDA);
+    const availableFees = programState.accumulatedFees.sub(programState.activeVouchersAmount);
+    console.log("Available fees for withdrawal:", availableFees.toString());
+    
+    // Only withdraw what's available
+    const withdrawAmt = availableFees;
+    
     await program.methods
       .withdrawFees(withdrawAmt)
       .accounts({
@@ -549,16 +553,145 @@ describe("EventBetting Program Tests", () => {
         feePool: feePoolPDA,
         ownerTokenAccount: ownerTokenAccount,
         owner: owner.publicKey,
-        program_authority: programAuthority.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
       })
       .signers([owner])
       .rpc();
+    
     console.log("Fees withdrawn:", withdrawAmt.toString());
     const after = await getAccount(provider.connection, ownerTokenAccount);
+    
+    // Check balance increase and program state update
     assert.isTrue(new anchor.BN(after.amount.toString()).gt(new anchor.BN(before.amount.toString())));
+    
+    const updatedState = await program.account.programState.fetch(programStatePDA);
+    assert.equal(
+      updatedState.accumulatedFees.toString(),
+      programState.activeVouchersAmount.toString(),
+      "All available fees should be withdrawn"
+    );
+  });
+
+  it("Update config with all options", async () => {
+    // Generate new keypairs for new owner and signer
+    const newOwner = Keypair.generate();
+    const newSigner = Keypair.generate();
+    
+    // Airdrop SOL to the new owner so they can perform transactions later
+    await provider.connection.requestAirdrop(newOwner.publicKey, 10 * LAMPORTS_PER_SOL);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Set a new fee percentage - convert to BN to match program state format
+    const newFeePercentage = new anchor.BN(1500); // 15.00%
+    
+    // Fetch program state before update
+    const stateBefore = await program.account.programState.fetch(programStatePDA);
+    console.log("Program state before update:", {
+      owner: stateBefore.owner.toBase58(),
+      signer: stateBefore.signer.toBase58(),
+      // Fix: Use camelCase field name to match Anchor's JavaScript conversion
+      feePercentage: stateBefore.feePercentage.toString(),
+    });
+    
+    // Update config with all options
+    await program.methods
+      .updateConfig(
+        newOwner.publicKey,
+        newSigner.publicKey,
+        newFeePercentage
+      )
+      .accounts({
+        programState: programStatePDA,
+        owner: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc();
+    
+    console.log("Config updated");
+    
+    // Fetch program state after update
+    const stateAfter = await program.account.programState.fetch(programStatePDA);
+    console.log("Program state after update:", {
+      owner: stateAfter.owner.toBase58(),
+      signer: stateAfter.signer.toBase58(),
+      // Fix: Use camelCase field name to match Anchor's JavaScript conversion
+      feePercentage: stateAfter.feePercentage.toString(),
+    });
+    
+    // Assert that all values were updated correctly
+    assert.equal(
+      stateAfter.owner.toBase58(),
+      newOwner.publicKey.toBase58(),
+      "Owner not updated correctly"
+    );
+    assert.equal(
+      stateAfter.signer.toBase58(),
+      newSigner.publicKey.toBase58(),
+      "Signer not updated correctly"
+    );
+    assert.equal(
+      stateAfter.feePercentage.toString(), // Fix: Use camelCase field name
+      newFeePercentage.toString(),
+      "Fee percentage not updated correctly"
+    );
+    
+    // Restore original owner for subsequent tests
+    await program.methods
+      .updateConfig(
+        owner.publicKey,
+        programAuthority.publicKey,
+        new anchor.BN(1000) // Original fee percentage - convert to BN
+      )
+      .accounts({
+        programState: programStatePDA,
+        owner: newOwner.publicKey,
+      })
+      .signers([newOwner])
+      .rpc();
+    
+    console.log("Config restored to original values");
+  });
+
+  it("Close user bet after claiming winnings", async () => {
+    // We need to use the user who has already claimed winnings
+    
+    // First verify that the user bet amount is 0 (already claimed)
+    const userBetAccount = await program.account.userBet.fetch(userBetPDA);
+    assert.equal(userBetAccount.amount.toString(), "0", "User bet should have 0 amount after claiming");
+    
+    // Get user SOL balance before closing
+    const userBalanceBefore = await provider.connection.getBalance(user.publicKey);
+    
+    // Now close the user bet account
+    await program.methods
+      .closeUserBet()
+      .accounts({
+        userBet: userBetPDA,
+        event: eventPDA,
+        user: user.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+    
+    console.log("User bet account closed");
+    
+    // Verify user bet account is closed (should fail to fetch)
+    try {
+      await program.account.userBet.fetch(userBetPDA);
+      assert.fail("User bet account should be closed");
+    } catch (error: any) {
+      // Expected error when account is closed/doesn't exist
+      assert.include(error.toString(), "Account does not exist", "Expected account to be closed");
+    }
+    
+    // Verify user received the SOL from the closed account
+    const userBalanceAfter = await provider.connection.getBalance(user.publicKey);
+    assert.isTrue(
+      userBalanceAfter > userBalanceBefore,
+      "User balance should increase after closing account"
+    );
+    console.log("User SOL balance increased by:", (userBalanceAfter - userBalanceBefore) / LAMPORTS_PER_SOL);
   });
 });

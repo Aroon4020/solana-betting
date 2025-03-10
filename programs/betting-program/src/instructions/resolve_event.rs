@@ -47,7 +47,7 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
     );
     require!(
         ctx.accounts.event_pool.mint == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidEventPoolATA
+        EventBettingProtocolError::InvalidFeePoolATA
     );
 
     let program_state = &mut ctx.accounts.program_state;
@@ -66,7 +66,7 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
     let (expected_event_pool, _bump) = Pubkey::find_program_address(&[EVENT_SEED, &ctx.accounts.event.id.to_le_bytes(), b"pool"], ctx.program_id);
     require!(
         ctx.accounts.event_pool.key() == expected_event_pool,
-        EventBettingProtocolError::InvalidEventPoolATA
+        EventBettingProtocolError::InvalidFeePoolATA
     );
 
     let event = &mut ctx.accounts.event;
@@ -134,9 +134,12 @@ pub fn resolve_event_handler(ctx: Context<ResolveEvent>, winning_outcome: String
     let unclaimed_vouchers = event.voucher_amount
         .checked_sub(event.total_voucher_claimed)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
-    program_state.active_vouchers_amount = program_state.active_vouchers_amount
-        .checked_sub(unclaimed_vouchers)
-        .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+
+    if unclaimed_vouchers > 0 {
+        program_state.active_vouchers_amount = program_state.active_vouchers_amount
+            .checked_sub(unclaimed_vouchers)
+            .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
+    }
 
     event.resolved = true;
     event.winning_outcome = Some(winning_outcome.clone());

@@ -3,11 +3,9 @@ use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
 pub struct UpdateVoucherAmount<'info> {
-    // Remove mut from signer since we're not modifying it
     #[account(signer)]
     pub owner: Signer<'info>,
 
-    // Add proper PDA validation
     #[account(
         mut,
         seeds = [BETTING_STATE_SEED],
@@ -16,7 +14,6 @@ pub struct UpdateVoucherAmount<'info> {
     )]
     pub program_state: Account<'info, ProgramState>,
 
-    // Add proper PDA validation for event
     #[account(
         mut,
         seeds = [EVENT_SEED, &event.id.to_le_bytes()],

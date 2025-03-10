@@ -30,9 +30,6 @@ pub struct Event {
     pub resolved: bool,
 }
 
-impl Event {
-    pub const LEN: usize = 8 + 8 + 256 + (4 + 10 * (4 + 20)) + (1 + (4 + 20)) + 8 + 8 + 8 + (4 + 10 * 8) + 1;
-}
 
 #[account]
 pub struct UserBet {

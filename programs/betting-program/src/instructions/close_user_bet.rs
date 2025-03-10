@@ -11,11 +11,10 @@ pub struct CloseUserBet<'info> {
     )]
     pub user_bet: Account<'info, UserBet>,
     
-    // Add proper event PDA validation
     #[account(
         seeds = [EVENT_SEED, &event.id.to_le_bytes()], 
         bump,
-        constraint = event.resolved @ EventBettingProtocolError::EventNotResolvedYet
+        constraint = event.resolved @ EventBettingProtocolError::EventStillActive
     )]
     pub event: Account<'info, Event>,
     
@@ -26,20 +25,14 @@ pub struct CloseUserBet<'info> {
 }
 
 pub fn close_user_bet_handler(ctx: Context<CloseUserBet>) -> Result<()> {
-    // Validate that the user bet has no unclaimed amount with proper error
     require!(
         ctx.accounts.user_bet.amount == 0, 
-        EventBettingProtocolError::NoWinningsToClaim // Replace InvalidOutcome with more appropriate error
+        EventBettingProtocolError::BettingClosed
     );
-    
-    // Since we use `close = user` in the account validation, 
-    // Anchor will automatically handle closing the account and sending the lamports to the user
-    
     emit!(UserBetClosed {
         event_id: ctx.accounts.event.id,
         user: ctx.accounts.user.key(),
     });
-    
     Ok(())
 }
 

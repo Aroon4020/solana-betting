@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{state::ProgramState, error::EventBettingProtocolError, constants::*}; // Add constants import
+use crate::{state::ProgramState, error::EventBettingProtocolError, constants::*}; 
 
 #[derive(Accounts)]
 pub struct UpdateConfig<'info> {
@@ -10,8 +10,6 @@ pub struct UpdateConfig<'info> {
         has_one = owner @ EventBettingProtocolError::Unauthorized
     )]
     pub program_state: Account<'info, ProgramState>,
-    
-    // Remove mut as we don't modify the signer
     #[account(signer)]
     pub owner: Signer<'info>,
 }
@@ -31,14 +29,13 @@ pub fn update_config_handler(
         program_state.signer = signer;
     }
     if let Some(fee) = new_fee_percentage {
-        // Store fee percentage as u64 in state.
         program_state.fee_percentage = fee as u64;
     }
 
     emit!(ConfigUpdated {
         new_owner: program_state.owner,
         new_signer: program_state.signer,
-        new_fee_percentage: program_state.fee_percentage as u16, // Cast back to u16 for event.
+        new_fee_percentage: program_state.fee_percentage as u16,
     });
 
     Ok(())

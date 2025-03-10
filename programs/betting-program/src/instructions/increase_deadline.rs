@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::error::EventBettingProtocolError;
-use crate::constants::*; // Add constants import
+use crate::constants::*; 
 
 #[derive(Accounts)]
 pub struct IncreaseDeadline<'info> {
@@ -19,8 +19,6 @@ pub struct IncreaseDeadline<'info> {
         bump
     )]
     pub event: Account<'info, Event>,
-    
-    // Already without mut, which is correct
     pub owner: Signer<'info>,
 }
 
@@ -30,16 +28,13 @@ pub fn increase_deadline_handler(
 ) -> Result<()> {
     let event = &mut ctx.accounts.event;
 
-    // Ensure the new deadline is later than the current deadline
     require!(
         new_deadline > event.deadline,
         EventBettingProtocolError::DeadlineInThePast
     );
 
-    // Update the event deadline
     event.deadline = new_deadline;
 
-    // Emit event indicating deadline increase
     emit!(DeadlineIncreased {
         event_id: event.id,
         new_deadline,

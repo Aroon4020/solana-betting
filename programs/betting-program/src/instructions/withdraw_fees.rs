@@ -32,7 +32,7 @@ pub struct WithdrawFees<'info> {
 }
 
 pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
-    require!(amount > 0, EventBettingProtocolError::WithdrawAmountZero);
+    require!(amount > 0, EventBettingProtocolError::BetAmountZero);
     let program_state = &mut ctx.accounts.program_state;
 
     let expected_owner_ata = get_associated_token_address(&ctx.accounts.owner.key(), &ctx.accounts.owner_token_account.mint);
@@ -48,16 +48,14 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
     );
 
     let max_withdrawable = program_state.accumulated_fees.saturating_sub(program_state.active_vouchers_amount);
-    let withdraw_amount = amount;
     
-    // Instead of silently adjusting, return an error if requested amount is too high
     require!(
-        withdraw_amount <= max_withdrawable,
+        amount <= max_withdrawable,
         EventBettingProtocolError::InsufficientFees
     );
 
     program_state.accumulated_fees = program_state.accumulated_fees
-        .checked_sub(withdraw_amount)
+        .checked_sub(amount)
         .ok_or(EventBettingProtocolError::InsufficientFees)?;
 
     token::transfer(
@@ -70,11 +68,11 @@ pub fn withdraw_fees_handler(ctx: Context<WithdrawFees>, amount: u64) -> Result<
             },
             &[&[BETTING_STATE_SEED, &[ctx.bumps.program_state]]],
         ),
-        withdraw_amount,
+        amount,
     )?;
 
     emit!(FeesWithdrawn {
-        amount: withdraw_amount,
+        amount: amount,
     });
 
     Ok(())
