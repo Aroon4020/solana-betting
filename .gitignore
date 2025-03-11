@@ -1,7 +1,29 @@
-.anchor
+# Environment variables
+.env
+
+# Keypair files
+deploy-keypair.json
+*-keypair.json
+
+# Build artifacts
+/target/
+/dist/
+/build/
+/node_modules/
+/anchor/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS specific
 .DS_Store
-target
-**/*.rs.bk
-node_modules
-test-ledger
-.yarn
+Thumbs.db
