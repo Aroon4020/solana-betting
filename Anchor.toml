@@ -3,14 +3,20 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-betting_program = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
+
+[programs.devnet]
+betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
+
+[programs.testnet]
+betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+cluster = "devnet"
+wallet = "/home/xyz/solana/betting-program/deploy-keypair.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'"

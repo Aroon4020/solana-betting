@@ -1,7 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
-use anchor_spl::associated_token::get_associated_token_address;
-use solana_program::pubkey::Pubkey;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
 #[derive(Accounts)]
@@ -32,28 +30,6 @@ pub struct AddVoucherFunds<'info> {
 
 pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> Result<()> {
     require!(amount > 0, EventBettingProtocolError::BetAmountZero);
-
-    require!(
-        ctx.accounts.token_mint.key() == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidTokenMint
-    );
-
-    let expected_sender_ata = get_associated_token_address(&ctx.accounts.fund_source.key(), &ctx.accounts.token_mint.key());
-    require!(
-        *ctx.accounts.user_token_account.to_account_info().key == expected_sender_ata,
-        EventBettingProtocolError::InvalidUserATA
-    );
-
-    require!(
-        ctx.accounts.user_token_account.amount >= amount,
-        EventBettingProtocolError::InsufficientFees
-    );
-
-    let (expected_fee_pool, _bump) = Pubkey::find_program_address(&[BETTING_STATE_SEED, FEE_POOL_SEED], ctx.program_id);
-    require!(
-        ctx.accounts.fee_pool.key() == expected_fee_pool,
-        EventBettingProtocolError::InvalidFeePoolATA
-    );
 
     // Record funds in program state
     ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
