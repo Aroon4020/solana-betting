@@ -40,20 +40,22 @@ pub struct ClaimWinnings<'info> {
 }
 
 pub fn claim_winnings_handler(ctx: Context<ClaimWinnings>) -> Result<()> {
+    let user_bet_amount = ctx.accounts.user_bet.amount;
+    let user_bet_outcome = ctx.accounts.user_bet.outcome.clone();
+    
+    // Keep essential business validations
+    let winning = ctx.accounts.event.winning_outcome.clone()
+        .ok_or(EventBettingProtocolError::EventStillActive)?;
+    
+    require!(winning == user_bet_outcome, EventBettingProtocolError::InvalidOutcome);
+    
+    // Remaining logic
     let expected_ata = get_associated_token_address(&ctx.accounts.user.key(), &ctx.accounts.program_state.token_mint);
     require!(
         *ctx.accounts.user_token_account.to_account_info().key == expected_ata,
         EventBettingProtocolError::InvalidUserATA
     );
 
-    let user_bet_amount = ctx.accounts.user_bet.amount;
-    let user_bet_outcome = ctx.accounts.user_bet.outcome.clone();
-    
-    let winning = ctx.accounts.event.winning_outcome.clone()
-        .ok_or(EventBettingProtocolError::EventStillActive)?;
-    
-    require!(winning == user_bet_outcome, EventBettingProtocolError::InvalidOutcome);
-    
     let win_idx = ctx.accounts.event.outcomes.iter().position(|opt| *opt == winning)
         .ok_or(EventBettingProtocolError::InvalidOutcome)?;
     let total_winning_bets = ctx.accounts.event.total_bets_by_outcome[win_idx];

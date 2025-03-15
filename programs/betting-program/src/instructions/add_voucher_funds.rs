@@ -23,7 +23,10 @@ pub struct AddVoucherFunds<'info> {
         token::authority = program_state
     )]
     pub fee_pool: Account<'info, TokenAccount>,
+    
+    #[account(constraint = token_mint.key() == program_state.token_mint)]
     pub token_mint: Account<'info, Mint>,
+    
     pub token_program: Program<'info, Token>,
 }
 
@@ -52,10 +55,12 @@ pub fn add_voucher_funds_handler(ctx: Context<AddVoucherFunds>, amount: u64) -> 
         EventBettingProtocolError::InvalidFeePoolATA
     );
 
+    // Record funds in program state
     ctx.accounts.program_state.accumulated_fees = ctx.accounts.program_state.accumulated_fees
         .checked_add(amount)
         .ok_or(EventBettingProtocolError::ArithmeticOverflow)?;
 
+    // Transfer tokens
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),

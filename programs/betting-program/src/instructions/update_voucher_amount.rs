@@ -10,7 +10,7 @@ pub struct UpdateVoucherAmount<'info> {
         mut,
         seeds = [BETTING_STATE_SEED],
         bump,
-        has_one = owner @ EventBettingProtocolError::Unauthorized
+        has_one = owner @ EventBettingProtocolError::Unauthorized  // Add validation here
     )]
     pub program_state: Account<'info, ProgramState>,
 

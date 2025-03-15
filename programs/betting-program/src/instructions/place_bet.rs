@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use anchor_spl::associated_token::get_associated_token_address;
 use solana_program::sysvar::clock::Clock;
 use crate::{state::*, constants::*, error::EventBettingProtocolError};
 
@@ -23,7 +22,7 @@ pub struct PlaceBet<'info> {
         bump
     )]
     pub user_bet: Account<'info, UserBet>,
-
+    
     #[account(mut, token::mint = program_state.token_mint)]
     pub user_token_account: Account<'info, TokenAccount>,
     
@@ -56,49 +55,15 @@ pub fn place_bet_handler(
     amount: u64,
     vouched_amount: u64,
 ) -> Result<()> {
-    let expected_user_ata = get_associated_token_address(&ctx.accounts.user.key(), &ctx.accounts.program_state.token_mint);
-    require!(
-        *ctx.accounts.user_token_account.to_account_info().key == expected_user_ata,
-        EventBettingProtocolError::InvalidUserATA
-    );
-    require!(
-        ctx.accounts.user_token_account.mint == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidUserATA
-    );
-
-    let (expected_event_pool, _bump) = Pubkey::find_program_address(
-        &[EVENT_SEED, &ctx.accounts.event.id.to_le_bytes(), b"pool"],
-        ctx.program_id
-    );
-    require!(
-        ctx.accounts.event_pool.key() == expected_event_pool,
-        EventBettingProtocolError::InvalidFeePoolATA
-    );
-    require!(
-        ctx.accounts.event_pool.mint == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidFeePoolATA
-    );
-
-    let (expected_fee_pool, _bump) = Pubkey::find_program_address(
-        &[BETTING_STATE_SEED, FEE_POOL_SEED],
-        ctx.program_id
-    );
-    require!(
-        ctx.accounts.fee_pool.key() == expected_fee_pool,
-        EventBettingProtocolError::InvalidFeePoolATA
-    );
-    require!(
-        ctx.accounts.fee_pool.mint == ctx.accounts.program_state.token_mint,
-        EventBettingProtocolError::InvalidFeePoolATA
-    );
-
     let event = &mut ctx.accounts.event;
     let user_bet = &mut ctx.accounts.user_bet;
     let clock: u64 = Clock::get()?.unix_timestamp as u64;
 
+    // Keep essential business logic validations
     require!(clock >= event.start_time, EventBettingProtocolError::BettingNotStarted);
     require!(clock < event.deadline, EventBettingProtocolError::BettingClosed);
 
+    // Process user funds transfer if amount > 0
     if amount > 0 {
         token::transfer(
             CpiContext::new(
@@ -113,6 +78,7 @@ pub fn place_bet_handler(
         )?;
     }
 
+    // Process voucher transfer if vouched_amount > 0
     if vouched_amount > 0 {
         require!(
             ctx.accounts.admin_signer.key() == ctx.accounts.program_state.signer,

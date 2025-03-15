@@ -8,7 +8,7 @@ mod instructions;
 
 use instructions::*; 
 
-declare_id!("4sMQTc52idt5YQ8SVFuWwC5pwYB7ufjU3GNwi1v68oVg");
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod event_betting {
