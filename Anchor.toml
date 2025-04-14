@@ -3,13 +3,13 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
+betting_program = "9sJX93ToaYQArDSy24xeWJkJvQhP4r2qRNw7qTabWnDk"
 
 [programs.devnet]
-betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
+betting_program = "9sJX93ToaYQArDSy24xeWJkJvQhP4r2qRNw7qTabWnDk"
 
 [programs.testnet]
-betting_program = "5qrbRxifAxH98dRpGGnEMoR9DgoJ7mjCAgbbXQdLZbZz"
+betting_program = "9sJX93ToaYQArDSy24xeWJkJvQhP4r2qRNw7qTabWnDk"
 
 [registry]
 url = "https://api.apr.dev"
